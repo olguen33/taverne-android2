@@ -3,8 +3,8 @@ package fr.taverne.mercenaires;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.TimePickerDialog;
-import android.os.Bundle;
 import android.media.MediaPlayer;
+import android.os.Bundle;
 import android.os.Build;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -75,21 +75,30 @@ public final class MainActivity extends Activity {
     private String section="accueil";
     private int charactersPage=0,mjPage=-1;
     private long openContract=-1;
+    private boolean completedContracts=false;
     private long editingContractId=-1;
     private long openCharacter=-1;
+    private long campaignCharacter=-1;
+    private int expandedCampaignPanel=-1;
     private long accountId=-1;
     private boolean creatingAccount=false;
     private UpdateManager updates;
-    private MediaPlayer ambience;
-    private boolean musicEnabled;
+    private MediaPlayer tavernAudio;
+    private static final String AUDIO_PREFS="audio_settings";
+    private static final String MUSIC_ENABLED="music_enabled";
     private static final String SESSION_PREFS="session";
     private static final String REMEMBERED_ACCOUNT="remembered_account_id";
-    @Override public void onCreate(Bundle state){super.onCreate(state);getWindow().setStatusBarColor(FOREST);getWindow().setNavigationBarColor(FOREST);db=new TavernDb(this);SharedPreferences prefs=getSharedPreferences(SESSION_PREFS,MODE_PRIVATE);long remembered=prefs.getLong(REMEMBERED_ACCOUNT,-1);if(remembered>=0){if(!db.accountName(remembered).isEmpty())accountId=remembered;else prefs.edit().remove(REMEMBERED_ACCOUNT).apply();}updates=new UpdateManager(this);musicEnabled=getSharedPreferences("audio",MODE_PRIVATE).getBoolean("enabled",true);show();startAmbience();updates.check(false);}
-    @Override protected void onResume(){super.onResume();if(ambience!=null&&musicEnabled&&!ambience.isPlaying())ambience.start();if(root!=null)root.post(this::hideSystemBarsAfterAttach);if(updates!=null)updates.resume();}
-    @Override protected void onPause(){if(ambience!=null&&ambience.isPlaying())ambience.pause();super.onPause();}
-    @Override protected void onDestroy(){if(ambience!=null){ambience.release();ambience=null;}super.onDestroy();}
-    private void startAmbience(){if(!musicEnabled)return;try{if(ambience==null){ambience=MediaPlayer.create(this,R.raw.tavern_ambience);if(ambience==null)return;ambience.setLooping(true);ambience.setVolume(.65f,.65f);}ambience.start();}catch(Exception e){if(ambience!=null){ambience.release();ambience=null;}}}
-    private void toggleAmbience(){musicEnabled=!musicEnabled;getSharedPreferences("audio",MODE_PRIVATE).edit().putBoolean("enabled",musicEnabled).apply();if(musicEnabled)startAmbience();else if(ambience!=null&&ambience.isPlaying())ambience.pause();}
+    @Override public void onCreate(Bundle state){super.onCreate(state);getWindow().setStatusBarColor(FOREST);getWindow().setNavigationBarColor(FOREST);db=new TavernDb(this);SharedPreferences prefs=getSharedPreferences(SESSION_PREFS,MODE_PRIVATE);long remembered=prefs.getLong(REMEMBERED_ACCOUNT,-1);if(remembered>=0){if(!db.accountName(remembered).isEmpty())accountId=remembered;else prefs.edit().remove(REMEMBERED_ACCOUNT).apply();}updates=new UpdateManager(this);show();updates.check(false);}
+    @Override protected void onResume(){super.onResume();if(root!=null)root.post(this::hideSystemBarsAfterAttach);if(updates!=null)updates.resume();syncTavernAudio();}
+    @Override protected void onPause(){pauseTavernAudio();super.onPause();}
+    @Override protected void onDestroy(){if(tavernAudio!=null){tavernAudio.release();tavernAudio=null;}super.onDestroy();}
+    private boolean musicEnabled(){return getSharedPreferences(AUDIO_PREFS,MODE_PRIVATE).getBoolean(MUSIC_ENABLED,true);}
+    private void pauseTavernAudio(){if(tavernAudio!=null&&tavernAudio.isPlaying())tavernAudio.pause();}
+    private void syncTavernAudio(){
+        if(accountId<0||!section.equals("accueil")||!musicEnabled()||isFinishing()){pauseTavernAudio();return;}
+        if(tavernAudio==null){tavernAudio=MediaPlayer.create(this,R.raw.tavern_ambience);if(tavernAudio==null)return;tavernAudio.setLooping(true);}
+        if(!tavernAudio.isPlaying())tavernAudio.start();
+    }
     private void hideSystemBarsAfterAttach(){
         if(root==null||!root.isAttachedToWindow())return;
         View decor=getWindow().getDecorView();
@@ -99,7 +108,7 @@ public final class MainActivity extends Activity {
         }else decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
         root.requestApplyInsets();
     }
-    @Override public void onBackPressed(){if(openCharacter>=0||openContract>=0){openCharacter=-1;openContract=-1;show();}else if(section.equals("mj")&&mjPage>=0){mjPage=-1;editingContractId=-1;show();}else if(accountId>=0&&!section.equals("accueil")){section="accueil";show();}else super.onBackPressed();}
+    @Override public void onBackPressed(){if(section.equals("campagne")&&campaignCharacter>=0){campaignCharacter=-1;expandedCampaignPanel=-1;show();}else if(openCharacter>=0||openContract>=0){openCharacter=-1;openContract=-1;show();}else if(section.equals("mj")&&mjPage>=0){mjPage=-1;editingContractId=-1;show();}else if(accountId>=0&&!section.equals("accueil")){enterSection("accueil");}else super.onBackPressed();}
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){super.onActivityResult(requestCode,resultCode,data);if(requestCode==PICK_SHEET&&resultCode==RESULT_OK&&data!=null&&data.getData()!=null&&openCharacter>=0&&accountId>=0){Uri uri=data.getData();getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);db.setFileUri(accountId,openCharacter,uri.toString());show();}else if(requestCode==PICK_MAP&&resultCode==RESULT_OK&&data!=null&&data.getData()!=null&&accountId>=0){Uri uri=data.getData();try{getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);String name=uri.getLastPathSegment();try(android.database.Cursor cursor=getContentResolver().query(uri,new String[]{android.provider.OpenableColumns.DISPLAY_NAME},null,null,null)){if(cursor!=null&&cursor.moveToFirst())name=cursor.getString(0);}db.addDungeonMap(accountId,name==null?"Carte":name,uri.toString());mjPage=5;show();}catch(Exception e){info("Impossible d’ajouter cette carte.");}}}
     private int dp(int value){return Math.round(value*getResources().getDisplayMetrics().density);}
     private GradientDrawable background(int color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
@@ -112,6 +121,7 @@ public final class MainActivity extends Activity {
     private LinearLayout panel(){LinearLayout p=column();p.setPadding(dp(20),dp(20),dp(20),dp(20));p.setBackground(background(PAPER,14));LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-1,-2);params.bottomMargin=dp(16);body.addView(p,params);return p;}
     private void title(String value){TextView eyebrow=text("COMPAGNIE DES MERCENAIRES",12,GOLD,true);eyebrow.setLetterSpacing(.12f);body.addView(eyebrow);gap(body,9);TextView h=text(value,38,0xffe8e1d0,true);body.addView(h);gap(body,24);}
     private void info(String message){Toast.makeText(this,message,Toast.LENGTH_SHORT).show();}
+    private void enterSection(String target){section=target;show();}
     private void show(){
         root=column();root.setBackgroundColor(FOREST);
         root.setOnApplyWindowInsetsListener((view,insets)->{
@@ -121,12 +131,12 @@ public final class MainActivity extends Activity {
             view.setPadding(0,top,0,bottom);
             return insets;
         });
-        setContentView(root);root.requestApplyInsets();root.post(this::hideSystemBarsAfterAttach);
+        setContentView(root);root.requestApplyInsets();root.post(this::hideSystemBarsAfterAttach);syncTavernAudio();
         if(accountId<0){showAuthentication();return;}
         if(section.equals("accueil"))showHome();
         else{
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);header.setPadding(dp(12),dp(14),dp(18),dp(12));root.addView(header);
-        TextView back=text("‹",32,GOLD,false);back.setGravity(Gravity.CENTER);back.setContentDescription("Retour à la taverne");header.addView(back,new LinearLayout.LayoutParams(dp(48),dp(48)));back.setOnClickListener(v->{section="accueil";openCharacter=-1;openContract=-1;editingContractId=-1;show();});
+        TextView back=text("‹",32,GOLD,false);back.setGravity(Gravity.CENTER);back.setContentDescription("Retour à la taverne");header.addView(back,new LinearLayout.LayoutParams(dp(48),dp(48)));back.setOnClickListener(v->{openCharacter=-1;openContract=-1;editingContractId=-1;campaignCharacter=-1;enterSection("accueil");});
         TextView brand=text("La Taverne",24,0xffe8e1d0,true);header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));TextView gear=gearMenu();header.addView(gear,new LinearLayout.LayoutParams(dp(52),dp(52)));
         if(section.equals("carte")){showMap();}
         else{
@@ -135,9 +145,11 @@ public final class MainActivity extends Activity {
         else if(section.equals("rumeurs"))rumoursScreen();
         else if(section.equals("personnages")){if(charactersPage==1)archetypeScreen();else if(openCharacter<0)characterList();else characterDetail();}
         else if(section.equals("mj"))masterScreen();
+        else if(section.equals("campagne"))campaignScreen();
         else if(section.equals("boutique"))placeholderScreen("Boutique");
         }
         }
+        if(section.equals("campagne")&&expandedCampaignPanel>=0)return;
         HorizontalScrollView navScroll=new HorizontalScrollView(this);navScroll.setHorizontalScrollBarEnabled(false);navScroll.setFillViewport(true);navScroll.setBackgroundColor(0xff192a25);root.addView(navScroll,new LinearLayout.LayoutParams(-1,dp(68)));
         LinearLayout nav=new LinearLayout(this);navScroll.addView(nav,new android.widget.FrameLayout.LayoutParams(-2,-1));
         tab(nav,"Contrats","contrats");tab(nav,"Carte","carte");tab(nav,"Rumeurs","rumeurs");tab(nav,"Personnages","personnages");tab(nav,"Boutique","boutique");tab(nav,"Espace MJ","mj");
@@ -147,7 +159,7 @@ public final class MainActivity extends Activity {
             LinearLayout entries=column();entries.setBackground(background(0xb0324a3c,18));
             PopupWindow menu=new PopupWindow(entries,dp(52),dp(162),true);menu.setBackgroundDrawable(background(0xb0324a3c,18));menu.setElevation(dp(6));menu.setOutsideTouchable(true);
             TextView update=text("↻",27,GOLD,false);update.setGravity(Gravity.CENTER);update.setContentDescription("Vérifier les mises à jour");entries.addView(update,new LinearLayout.LayoutParams(dp(52),dp(54)));update.setOnClickListener(click->{menu.dismiss();updates.check(true);});
-            TextView music=text(musicEnabled?"♫":"♪",27,GOLD,false);music.setGravity(Gravity.CENTER);music.setContentDescription(musicEnabled?"Désactiver la musique":"Activer la musique");entries.addView(music,new LinearLayout.LayoutParams(dp(52),dp(54)));music.setOnClickListener(click->{menu.dismiss();toggleAmbience();});
+            TextView music=text(musicEnabled()?"♫":"♪",27,GOLD,false);music.setGravity(Gravity.CENTER);music.setContentDescription(musicEnabled()?"Désactiver la musique":"Activer la musique");entries.addView(music,new LinearLayout.LayoutParams(dp(52),dp(54)));music.setOnClickListener(click->{getSharedPreferences(AUDIO_PREFS,MODE_PRIVATE).edit().putBoolean(MUSIC_ENABLED,!musicEnabled()).apply();syncTavernAudio();menu.dismiss();});
             TextView logout=text("✕",27,0xffffb8a9,false);logout.setGravity(Gravity.CENTER);logout.setContentDescription("Quitter");entries.addView(logout,new LinearLayout.LayoutParams(dp(52),dp(54)));logout.setOnClickListener(click->{menu.dismiss();getSharedPreferences(SESSION_PREFS,MODE_PRIVATE).edit().remove(REMEMBERED_ACCOUNT).apply();accountId=-1;openCharacter=-1;openContract=-1;section="accueil";show();});
             menu.showAsDropDown(gear,0,dp(4));
         });return gear;
@@ -156,6 +168,27 @@ public final class MainActivity extends Activity {
         FrameLayout frame=new FrameLayout(this);root.addView(frame,new LinearLayout.LayoutParams(-1,0,1));
         frame.addView(new TavernHomeView(),new FrameLayout.LayoutParams(-1,-1));
         TextView gear=gearMenu();FrameLayout.LayoutParams corner=new FrameLayout.LayoutParams(dp(52),dp(52),Gravity.TOP|Gravity.RIGHT);corner.setMargins(0,dp(12),dp(12),0);frame.addView(gear,corner);
+        View campaign=new CampaignScroll();campaign.setElevation(dp(5));
+        campaign.setContentDescription("Ouvrir la campagne");
+        FrameLayout.LayoutParams link=new FrameLayout.LayoutParams(dp(190),dp(64),Gravity.BOTTOM|Gravity.RIGHT);
+        link.setMargins(0,0,dp(16),dp(16));frame.addView(campaign,link);
+        campaign.setOnClickListener(v->{campaignCharacter=-1;expandedCampaignPanel=-1;enterSection("campagne");});
+    }
+    private final class CampaignScroll extends View {
+        private final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
+        CampaignScroll(){super(MainActivity.this);setClickable(true);}
+        @Override protected void onDraw(Canvas canvas){
+            float w=getWidth(),h=getHeight(),unit=w/190f;
+            canvas.save();canvas.scale(unit,h/64f);
+            Path parchment=new Path();parchment.moveTo(12,10);parchment.cubicTo(36,14,116,9,151,12);parchment.lineTo(184,31);parchment.lineTo(151,51);parchment.cubicTo(111,50,35,54,12,53);parchment.close();
+            p.setStyle(Paint.Style.FILL);p.setColor(0xffd6b982);canvas.drawPath(parchment,p);
+            p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(2);p.setColor(0xff503a26);canvas.drawPath(parchment,p);
+            p.setStyle(Paint.Style.FILL);p.setColor(0xffb9925f);canvas.drawOval(2,8,23,56,p);
+            p.setColor(0xfff0dbac);canvas.drawOval(4,10,21,53,p);
+            p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(1.5f);p.setColor(0xff78583b);canvas.drawOval(4,10,21,53,p);
+            p.setStyle(Paint.Style.FILL);p.setTypeface(Typeface.create("serif",Typeface.BOLD));p.setTextSize(20);p.setTextAlign(Paint.Align.CENTER);p.setColor(0xff493321);canvas.drawText("Campagne",92,38,p);
+            canvas.restore();
+        }
     }
     private final class TavernHomeView extends View {
         private final Bitmap scene=BitmapFactory.decodeResource(getResources(),R.drawable.tavern_home);
@@ -204,23 +237,37 @@ public final class MainActivity extends Activity {
         }
         private final Bitmap woodTexture=BitmapFactory.decodeResource(getResources(),R.drawable.wood_sign);
         private void drawWoodSign(Canvas canvas,float availableHeight){
-            // The image begins at availableHeight; the entire upper band is the sign.
+            // The sign fills the complete space above the tavern illustration.
             if(availableHeight<=0||woodTexture==null)return;
             android.graphics.RectF band=new android.graphics.RectF(0,0,getWidth(),availableHeight);
             Paint board=new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG);
-            canvas.drawBitmap(woodTexture,null,band,board);
+            // Center crop preserves the scale of the grain on different phone screens.
+            float sourceAspect=woodTexture.getWidth()/(float)woodTexture.getHeight();
+            float targetAspect=getWidth()/availableHeight;
+            int sourceWidth=woodTexture.getWidth(),sourceHeight=woodTexture.getHeight();
+            android.graphics.Rect source;
+            if(sourceAspect>targetAspect){
+                int cropped=Math.round(sourceHeight*targetAspect);
+                int inset=(sourceWidth-cropped)/2;
+                source=new android.graphics.Rect(inset,0,inset+cropped,sourceHeight);
+            }else{
+                int cropped=Math.round(sourceWidth/targetAspect);
+                int inset=(sourceHeight-cropped)/2;
+                source=new android.graphics.Rect(0,inset,sourceWidth,inset+cropped);
+            }
+            canvas.drawBitmap(woodTexture,source,band,board);
             board.setShader(new LinearGradient(0,0,0,availableHeight,
-                new int[]{0x550b0805,0x00000000,0x77130b06},null,Shader.TileMode.CLAMP));
+                new int[]{0x450b0805,0x00000000,0x60130b06},null,Shader.TileMode.CLAMP));
             canvas.drawRect(band,board);board.setShader(null);
-            // Keep the wording clear of the gear, which sits in the top-right corner.
             String name="La Taverne du père Rufus";
             board.setTypeface(Typeface.create("serif",Typeface.BOLD));
-            board.setTextAlign(Paint.Align.CENTER);board.setTextSize(dp(22));
-            float usable=getWidth()-dp(78);
+            board.setTextAlign(Paint.Align.CENTER);
+            board.setTextSize(Math.min(dp(24),availableHeight*.34f));
+            float usable=getWidth()-dp(24);
             if(board.measureText(name)>usable)board.setTextSize(board.getTextSize()*usable/board.measureText(name));
-            float centerX=usable/2f;
+            float centerX=getWidth()/2f;
             float baseline=availableHeight/2f-(board.ascent()+board.descent())/2f;
-            board.setColor(0xc9000000);canvas.drawText(name,centerX+dp(1),baseline+dp(2),board);
+            board.setColor(0xd9000000);canvas.drawText(name,centerX+dp(1),baseline+dp(2),board);
             board.setColor(0xffffe4b4);canvas.drawText(name,centerX,baseline,board);
         }
         @Override public boolean onTouchEvent(MotionEvent event){if(event.getAction()==MotionEvent.ACTION_DOWN){downX=event.getX();downY=event.getY();return true;}if(event.getAction()!=MotionEvent.ACTION_UP)return true;if(Math.abs(event.getX()-downX)>dp(28)||Math.abs(event.getY()-downY)>dp(28))return true;
@@ -232,6 +279,30 @@ public final class MainActivity extends Activity {
             if(target!=null){section=target;openCharacter=-1;openContract=-1;show();performClick();}return true;
         }
         @Override public boolean performClick(){super.performClick();return true;}
+    }
+    private void campaignScreen(){
+        if(campaignCharacter<0){title("Campagne");LinearLayout introduction=panel();introduction.addView(text("Choisis ton personnage",24,INK,true));gap(introduction,10);introduction.addView(text("Ouvre son espace de campagne pour consulter sa fiche, son inventaire, ses dés et ses notes.",16,INK,false));
+            List<TavernDb.Character> characters=db.characters(accountId);
+            if(characters.isEmpty()){LinearLayout empty=panel();empty.addView(text("Aucun personnage pour ce compte.",17,INK,false));gap(empty,12);empty.addView(button("Créer un personnage",()->enterSection("personnages")));}
+            for(TavernDb.Character c:characters){LinearLayout card=panel();card.addView(text(c.name,25,INK,true));gap(card,6);card.addView(text(characterSummary(c),15,INK,false));gap(card,12);card.addView(button("Choisir ce personnage",()->{campaignCharacter=c.id;expandedCampaignPanel=-1;show();}));}
+            return;
+        }
+        TavernDb.Character current=null;for(TavernDb.Character c:db.characters(accountId))if(c.id==campaignCharacter)current=c;
+        if(current==null){campaignCharacter=-1;expandedCampaignPanel=-1;campaignScreen();return;}
+        final TavernDb.Character character=current;
+        body.addView(button("‹  Changer de personnage",()->{campaignCharacter=-1;expandedCampaignPanel=-1;show();}));gap(body,16);title(character.name);
+        final String[] headings={"Fiche du personnage","Inventaire","Dés","Note"};
+        for(int i=0;i<headings.length;i++){
+            if(expandedCampaignPanel>=0&&expandedCampaignPanel!=i)continue;
+            final int index=i;LinearLayout card=panel();LinearLayout heading=new LinearLayout(this);heading.setGravity(Gravity.CENTER_VERTICAL);card.addView(heading);
+            TextView expand=text(expandedCampaignPanel==i?"↙":"⤢",26,INK,true);expand.setGravity(Gravity.CENTER);expand.setContentDescription(expandedCampaignPanel==i?"Réduire "+headings[i]:"Agrandir "+headings[i]);
+            TextView name=text(headings[i],22,INK,true);heading.addView(name,new LinearLayout.LayoutParams(0,-2,1));
+            heading.addView(expand,new LinearLayout.LayoutParams(dp(44),dp(44)));expand.setOnClickListener(v->{expandedCampaignPanel=expandedCampaignPanel==index?-1:index;show();});gap(card,12);
+            if(i==0){card.addView(text(characterSummary(character),17,INK,false));gap(card,12);if(!character.sheet.isEmpty()){card.addView(text(character.sheet,16,INK,false));gap(card,12);}card.addView(button("Ouvrir et modifier la fiche",()->{openCharacter=character.id;enterSection("personnages");}));}
+            else if(i==1){EditText inventory=input(card,"Un objet et sa quantité par ligne",character.inventory,5);card.addView(button("Enregistrer l’inventaire",()->{db.setInventory(accountId,character.id,inventory.getText().toString());info("Inventaire enregistré.");}));}
+            else if(i==2){LinearLayout dice=column();card.addView(dice);TextView result=text("Choisis un dé à lancer.",18,INK,false);for(int sides:new int[]{4,6,8,10,12,20,100}){Button roll=button("D"+sides,()->result.setText("D"+sides+" : "+(1+new java.security.SecureRandom().nextInt(sides))));LinearLayout.LayoutParams diceParams=new LinearLayout.LayoutParams(-1,dp(46));diceParams.bottomMargin=dp(6);dice.addView(roll,diceParams);}gap(card,8);card.addView(result);}
+            else{EditText notes=input(card,"Notes de campagne…",db.campaignNotes(accountId,character.id),6);card.addView(button("Enregistrer la note",()->{db.setCampaignNotes(accountId,character.id,notes.getText().toString());info("Note enregistrée.");}));}
+        }
     }
     private void rumoursScreen(){title("Rumeurs");boolean any=false;for(TavernDb.MapPlace place:db.mapPlaces())if(place.interest){any=true;LinearLayout p=panel();p.addView(text(place.description,18,INK,false));gap(p,12);p.addView(button("Voir sur la carte",()->{section="carte";show();}));}if(!any){LinearLayout p=panel();p.addView(text("Aucune rumeur pour le moment.",17,INK,false));}}
     private void showAuthentication(){
@@ -327,9 +398,21 @@ public final class MainActivity extends Activity {
             public void onNothingSelected(AdapterView<?> view){}
         });return spinner;
     }
-    private void tab(LinearLayout nav,String name,String target){TextView t=text(name,14,section.equals(target)?GOLD:0xffb1bfb4,section.equals(target));t.setGravity(Gravity.CENTER);t.setPadding(dp(12),0,dp(12),0);t.setMinWidth(dp(94));nav.addView(t,new LinearLayout.LayoutParams(-2,-1));t.setOnClickListener(v->{section=target;openContract=-1;openCharacter=-1;editingContractId=-1;if(target.equals("personnages"))charactersPage=0;if(target.equals("mj"))mjPage=-1;show();});}
-    private void contractList(){title("À l'affiche");List<TavernDb.Contract> contracts=db.contracts();if(contracts.isEmpty()){LinearLayout p=panel();p.addView(text("Le tableau est encore vide",23,INK,true));gap(p,8);p.addView(text("Le MJ peut afficher un premier contrat dans son espace.",16,INK,false));return;}
-        for(TavernDb.Contract c:contracts){LinearLayout p=panel();p.addView(text(c.status.toUpperCase(Locale.FRENCH),12,0xff75572f,true));gap(p,12);p.addView(text(c.title,27,INK,true));gap(p,6);p.addView(text(c.proposer.isEmpty()?"Proposé par : non renseigné":"Proposé par : "+c.proposer,14,0xff75572f,false));gap(p,10);p.addView(text(c.description,16,0xff526056,false));gap(p,15);p.addView(text(c.count+" / "+c.places+" mercenaires  ·  Danger "+c.danger+"/5",14,INK,false));gap(p,12);p.addView(button("Voir le contrat",()->{openContract=c.id;show();}));}
+    private void tab(LinearLayout nav,String name,String target){TextView t=text(name,14,section.equals(target)?GOLD:0xffb1bfb4,section.equals(target));t.setGravity(Gravity.CENTER);t.setPadding(dp(12),0,dp(12),0);t.setMinWidth(dp(94));nav.addView(t,new LinearLayout.LayoutParams(-2,-1));t.setOnClickListener(v->{pauseTavernAudio();section=target;openContract=-1;openCharacter=-1;editingContractId=-1;if(target.equals("personnages"))charactersPage=0;if(target.equals("mj"))mjPage=-1;show();});}
+    private void contractList(){
+        title("Contrats");
+        LinearLayout tabs=new LinearLayout(this);body.addView(tabs);gap(body,18);
+        Button active=button("En cours",()->{completedContracts=false;show();});
+        Button completed=button("Contrats terminés",()->{completedContracts=true;show();});
+        tabs.addView(active,new LinearLayout.LayoutParams(0,dp(48),1));
+        tabs.addView(completed,new LinearLayout.LayoutParams(0,dp(48),1));
+        active.setEnabled(completedContracts);completed.setEnabled(!completedContracts);
+        boolean any=false;
+        for(TavernDb.Contract c:db.contracts()){
+            if(c.status.equals("terminé")!=completedContracts)continue;
+            any=true;LinearLayout p=panel();p.addView(text(c.status.toUpperCase(Locale.FRENCH),12,0xff75572f,true));gap(p,12);p.addView(text(c.title,27,INK,true));gap(p,6);p.addView(text(c.proposer.isEmpty()?"Proposé par : non renseigné":"Proposé par : "+c.proposer,14,0xff75572f,false));gap(p,10);p.addView(text(c.description,16,0xff526056,false));gap(p,15);p.addView(text(c.count+" / "+c.places+" mercenaires  ·  Danger "+c.danger+"/5",14,INK,false));gap(p,12);p.addView(button("Voir le contrat",()->{openContract=c.id;show();}));
+        }
+        if(!any){LinearLayout p=panel();p.addView(text(completedContracts?"Aucun contrat terminé":"Aucun contrat en cours",21,INK,true));}
     }
     private TavernDb.Contract currentContract(){for(TavernDb.Contract c:db.contracts())if(c.id==openContract)return c;return null;}
     private Spinner characterChoice(LinearLayout p,List<TavernDb.Character> characters){label(p,"Ton personnage pour ce contrat");Spinner spinner=new Spinner(this);String[] names=new String[characters.size()];for(int i=0;i<names.length;i++)names[i]=characters.get(i).name;ArrayAdapter<String> adapter=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,names);adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);spinner.setAdapter(adapter);p.addView(spinner);gap(p,15);return spinner;}
@@ -337,7 +420,12 @@ public final class MainActivity extends Activity {
         List<TavernDb.MjSlot> slots=db.mjSlots(c.id);
         LinearLayout availability=panel();availability.addView(text("Disponibilités du MJ",23,INK,true));gap(availability,10);
         if(slots.isEmpty())availability.addView(text("Aucune disponibilité indiquée pour cet ancien contrat.",15,INK,false));
-        for(TavernDb.MjSlot slot:slots){availability.addView(text(slotLabel(slot)+" · "+slot.votes+" vote"+(slot.votes>1?"s":""),16,INK,false));gap(availability,7);}
+        for(TavernDb.MjSlot slot:slots){
+            List<String> voters=db.slotVoters(slot.id);
+            availability.addView(text(slotLabel(slot)+" · "+slot.votes+" vote"+(slot.votes>1?"s":""),16,INK,false));
+            availability.addView(text(voters.isEmpty()?"Aucun votant":android.text.TextUtils.join(", ",voters),14,0xff526056,false));
+            gap(availability,10);
+        }
         List<TavernDb.Character> characters=db.characters(accountId);LinearLayout group=panel();group.addView(text("La compagnie",23,INK,true));gap(group,12);for(String n:db.participants(c.id)){group.addView(text("• "+n,16,INK,false));gap(group,5);}gap(group,10);
         if(characters.isEmpty()){group.addView(text("Crée d'abord un personnage dans ton espace personnel.",15,INK,false));}
         else{
@@ -369,12 +457,11 @@ public final class MainActivity extends Activity {
         Spinner archetype=characterChoice(sheet,"Archétype de classe",ARCHETYPES,c.role);
         Spinner race=characterChoice(sheet,"Race",RACES,c.origin);Spinner origin=originChoice(sheet,c.background);
         label(sheet,"Fiche et notes");EditText notes=input(sheet,"Caractéristiques, compétences, équipement…",c.sheet,7);
-        LinearLayout inventoryPanel=panel();inventoryPanel.addView(text("Inventaire",23,INK,true));gap(inventoryPanel,12);label(inventoryPanel,"Un objet et sa quantité par ligne");EditText inventory=input(inventoryPanel,"Potion de soin × 3\nCorde × 1",c.inventory,6);
+        LinearLayout inventoryPanel=panel();inventoryPanel.addView(text("Inventaire",23,INK,true));gap(inventoryPanel,12);EditText inventory=input(inventoryPanel,"Un objet et sa quantité par ligne",c.inventory,7);
         LinearLayout history=panel();history.addView(text("Son histoire",23,INK,true));gap(history,16);label(history,"Lore du personnage");EditText lore=input(history,"Origines, passé, relations, ambitions…",c.lore,10);
         LinearLayout attachment=panel();attachment.addView(text("Fichier de fiche",23,INK,true));gap(attachment,12);if(c.fileUri!=null){attachment.addView(button("Ouvrir le fichier joint",()->{Intent view=new Intent(Intent.ACTION_VIEW,Uri.parse(c.fileUri));view.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);try{startActivity(view);}catch(Exception e){info("Aucune application ne peut ouvrir ce fichier.");}}));gap(attachment,10);}attachment.addView(button("Joindre un PDF ou une image",()->{Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT);pick.setType("*/*");pick.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"application/pdf","image/png","image/jpeg","image/webp"});pick.addCategory(Intent.CATEGORY_OPENABLE);pick.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);startActivityForResult(pick,PICK_SHEET);}));
         body.addView(button("Enregistrer les modifications",()->{String value=name.getText().toString().trim();if(value.isEmpty()){info("Indique un nom.");return;}
-            db.updateCharacter(accountId,c.id,value,selectedChoice(race),selectedChoice(archetype),selectedChoice(origin),notes.getText().toString(),lore.getText().toString());
-            db.setInventory(accountId,c.id,inventory.getText().toString());
+            db.updateCharacter(accountId,c.id,value,selectedChoice(race),selectedChoice(archetype),selectedChoice(origin),notes.getText().toString(),lore.getText().toString(),inventory.getText().toString());
             info("Personnage enregistré.");show();}));
     }
     private void masterScreen(){
