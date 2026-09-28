@@ -396,8 +396,9 @@ public final class MainActivity extends Activity {
         if(index<0||index>=ArchetypeRules.ALL.length){openArchetype=-1;archetypeScreen();return;}
         body.addView(button("‹  Tous les archétypes",()->{openArchetype=-1;show();}));gap(body,18);
         title(ARCHETYPES[index]);LinearLayout portrait=panel();ImageView image=new ImageView(this);
-        image.setImageResource(ARCHETYPE_IMAGES[index]);image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        image.setContentDescription("Illustration : "+ARCHETYPES[index]);portrait.addView(image,new LinearLayout.LayoutParams(-1,dp(255)));
+        image.setImageResource(ARCHETYPE_IMAGES[index]);image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        image.setBackgroundColor(0xfff8f0df);
+        image.setContentDescription("Illustration : "+ARCHETYPES[index]);portrait.addView(image,new LinearLayout.LayoutParams(-1,dp(320)));
         gap(portrait,14);portrait.addView(text(ARCHETYPE_DESCRIPTIONS[index],17,INK,false));
         LinearLayout rules=panel();showProfile(rules,ArchetypeRules.ALL[index],"","");
     }
