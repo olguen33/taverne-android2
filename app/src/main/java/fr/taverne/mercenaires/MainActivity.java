@@ -38,6 +38,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.FrameLayout;
 import android.widget.PopupWindow;
+import android.widget.ImageView;
 import android.text.InputType;
 import java.util.Arrays;
 import java.util.List;
@@ -60,7 +61,7 @@ public final class MainActivity extends Activity {
         "Agit dans l’ombre, avec précision et patience.",
         "Suit les pistes et connaît les créatures des terres sauvages."
     };
-    private static final String[] RACES={"Humain","Orc","Nain","Elf"};
+    private static final String[] RACES={"Humain","Orc","Nain","Elfe"};
     private static final String[] ORIGINS={"Citadin","Reclu","Vie sauvage"};
     private static final String[] ORIGIN_DESCRIPTIONS={
         "A grandi en ville, au milieu des métiers, des marchés et des intrigues.",
@@ -74,6 +75,8 @@ public final class MainActivity extends Activity {
     private LinearLayout body,root;
     private String section="accueil";
     private int charactersPage=0,mjPage=-1;
+    private int openArchetype=-1;
+    private static final int[] ARCHETYPE_IMAGES={R.drawable.archetype_guerrier,R.drawable.archetype_mage,R.drawable.archetype_archer,R.drawable.archetype_roublard,R.drawable.archetype_barbare,R.drawable.archetype_enqueteur,R.drawable.archetype_explorateur,R.drawable.archetype_paladin,R.drawable.archetype_assassin,R.drawable.archetype_chasseur};
     private long openContract=-1;
     private boolean completedContracts=false;
     private long editingContractId=-1;
@@ -108,7 +111,7 @@ public final class MainActivity extends Activity {
         }else decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
         root.requestApplyInsets();
     }
-    @Override public void onBackPressed(){if(section.equals("campagne")&&campaignCharacter>=0){campaignCharacter=-1;expandedCampaignPanel=-1;show();}else if(openCharacter>=0||openContract>=0){openCharacter=-1;openContract=-1;show();}else if(section.equals("mj")&&mjPage>=0){mjPage=-1;editingContractId=-1;show();}else if(accountId>=0&&!section.equals("accueil")){enterSection("accueil");}else super.onBackPressed();}
+    @Override public void onBackPressed(){if(section.equals("personnages")&&openArchetype>=0){openArchetype=-1;show();}else if(section.equals("campagne")&&campaignCharacter>=0){campaignCharacter=-1;expandedCampaignPanel=-1;show();}else if(openCharacter>=0||openContract>=0){openCharacter=-1;openContract=-1;show();}else if(section.equals("mj")&&mjPage>=0){mjPage=-1;editingContractId=-1;show();}else if(accountId>=0&&!section.equals("accueil")){enterSection("accueil");}else super.onBackPressed();}
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){super.onActivityResult(requestCode,resultCode,data);if(requestCode==PICK_SHEET&&resultCode==RESULT_OK&&data!=null&&data.getData()!=null&&openCharacter>=0&&accountId>=0){Uri uri=data.getData();getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);db.setFileUri(accountId,openCharacter,uri.toString());show();}else if(requestCode==PICK_MAP&&resultCode==RESULT_OK&&data!=null&&data.getData()!=null&&accountId>=0){Uri uri=data.getData();try{getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);String name=uri.getLastPathSegment();try(android.database.Cursor cursor=getContentResolver().query(uri,new String[]{android.provider.OpenableColumns.DISPLAY_NAME},null,null,null)){if(cursor!=null&&cursor.moveToFirst())name=cursor.getString(0);}db.addDungeonMap(accountId,name==null?"Carte":name,uri.toString());mjPage=5;show();}catch(Exception e){info("Impossible d’ajouter cette carte.");}}}
     private int dp(int value){return Math.round(value*getResources().getDisplayMetrics().density);}
     private GradientDrawable background(int color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
@@ -143,7 +146,7 @@ public final class MainActivity extends Activity {
         ScrollView scroll=new ScrollView(this);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));body=column();body.setPadding(dp(16),dp(24),dp(16),dp(28));scroll.addView(body);
         if(section.equals("contrats")){if(openContract<0)contractList();else contractDetail();}
         else if(section.equals("rumeurs"))rumoursScreen();
-        else if(section.equals("personnages")){if(charactersPage==1)archetypeScreen();else if(openCharacter<0)characterList();else characterDetail();}
+        else if(section.equals("personnages")){if(charactersPage==1){if(openArchetype>=0)archetypeDetail(openArchetype);else archetypeScreen();}else if(openCharacter<0)characterList();else characterDetail();}
         else if(section.equals("mj"))masterScreen();
         else if(section.equals("campagne"))campaignScreen();
         else if(section.equals("boutique"))placeholderScreen("Boutique");
@@ -298,7 +301,7 @@ public final class MainActivity extends Activity {
             TextView expand=text(expandedCampaignPanel==i?"↙":"⤢",26,INK,true);expand.setGravity(Gravity.CENTER);expand.setContentDescription(expandedCampaignPanel==i?"Réduire "+headings[i]:"Agrandir "+headings[i]);
             TextView name=text(headings[i],22,INK,true);heading.addView(name,new LinearLayout.LayoutParams(0,-2,1));
             heading.addView(expand,new LinearLayout.LayoutParams(dp(44),dp(44)));expand.setOnClickListener(v->{expandedCampaignPanel=expandedCampaignPanel==index?-1:index;show();});gap(card,12);
-            if(i==0){card.addView(text(characterSummary(character),17,INK,false));gap(card,12);if(!character.sheet.isEmpty()){card.addView(text(character.sheet,16,INK,false));gap(card,12);}card.addView(button("Ouvrir et modifier la fiche",()->{openCharacter=character.id;enterSection("personnages");}));}
+            if(i==0){card.addView(text(characterSummary(character),17,INK,false));gap(card,12);showProfile(card,ArchetypeRules.forName(character.role),character.origin,character.background);if(!character.sheet.isEmpty()){gap(card,12);card.addView(text(character.sheet,16,INK,false));}gap(card,12);card.addView(button("Ouvrir et modifier la fiche",()->{openCharacter=character.id;charactersPage=0;enterSection("personnages");}));}
             else if(i==1){EditText inventory=input(card,"Un objet et sa quantité par ligne",character.inventory,5);card.addView(button("Enregistrer l’inventaire",()->{db.setInventory(accountId,character.id,inventory.getText().toString());info("Inventaire enregistré.");}));}
             else if(i==2){LinearLayout dice=column();card.addView(dice);TextView result=text("Choisis un dé et sa quantité, puis touche D pour lancer.",18,INK,false);
                 java.security.SecureRandom random=new java.security.SecureRandom();
@@ -374,7 +377,7 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams a=new LinearLayout.LayoutParams(0,dp(48),1),b=new LinearLayout.LayoutParams(0,dp(48),1);a.rightMargin=dp(5);b.leftMargin=dp(5);
         row.addView(left,a);row.addView(right,b);gap(body,16);
     }
-    private void characterTabs(){subTabs("Mes personnages","Archétypes",charactersPage==0,()->{charactersPage=0;openCharacter=-1;show();},()->{charactersPage=1;openCharacter=-1;show();});}
+    private void characterTabs(){subTabs("Mes personnages","Archétypes",charactersPage==0,()->{charactersPage=0;openArchetype=-1;openCharacter=-1;show();},()->{charactersPage=1;openArchetype=-1;openCharacter=-1;show();});}
     private void mjSummary(){
         title("Espace MJ");
         for(int i=0;i<MJ_TABS.length;i++){
@@ -385,8 +388,41 @@ public final class MainActivity extends Activity {
             p.addView(entry,new LinearLayout.LayoutParams(-1,dp(56)));
         }
     }
-    private void archetypeScreen(){title("Personnages");characterTabs();for(int i=0;i<ARCHETYPES.length;i++){
-        LinearLayout p=panel();p.addView(text(ARCHETYPES[i],23,INK,true));gap(p,8);p.addView(text(ARCHETYPE_DESCRIPTIONS[i],16,INK,false));}}
+    private void archetypeScreen(){title("Archétypes");characterTabs();for(int i=0;i<ARCHETYPES.length;i++){
+        final int index=i;LinearLayout p=panel();p.addView(text(ARCHETYPES[i],23,INK,true));gap(p,8);p.addView(text(ARCHETYPE_DESCRIPTIONS[i],16,INK,false));gap(p,12);
+        p.addView(button("Voir la fiche  ›",()->{openArchetype=index;show();}));
+    }}
+    private void archetypeDetail(int index){
+        if(index<0||index>=ArchetypeRules.ALL.length){openArchetype=-1;archetypeScreen();return;}
+        body.addView(button("‹  Tous les archétypes",()->{openArchetype=-1;show();}));gap(body,18);
+        title(ARCHETYPES[index]);LinearLayout portrait=panel();ImageView image=new ImageView(this);
+        image.setImageResource(ARCHETYPE_IMAGES[index]);image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        image.setContentDescription("Illustration : "+ARCHETYPES[index]);portrait.addView(image,new LinearLayout.LayoutParams(-1,dp(255)));
+        gap(portrait,14);portrait.addView(text(ARCHETYPE_DESCRIPTIONS[index],17,INK,false));
+        LinearLayout rules=panel();showProfile(rules,ArchetypeRules.ALL[index],"","");
+    }
+    private void profileRow(LinearLayout parent,String label,String value){
+        LinearLayout row=new LinearLayout(this);row.setPadding(dp(9),dp(8),dp(9),dp(8));
+        row.setBackground(background(0xffe2d5b9,4));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.bottomMargin=dp(3);parent.addView(row,lp);
+        row.addView(text(label,15,INK,true),new LinearLayout.LayoutParams(0,-2,2));
+        TextView content=text(value,16,INK,false);content.setGravity(Gravity.END);row.addView(content,new LinearLayout.LayoutParams(0,-2,1));
+    }
+    private void showProfile(LinearLayout parent,ArchetypeRules.Profile profile,String race,String origin){
+        if(profile==null){parent.addView(text("Aucune fiche d’archétype pour ce personnage.",16,INK,false));return;}
+        boolean character=!race.isEmpty()&&!origin.isEmpty();
+        parent.addView(text(character?"Caractéristiques du personnage":"Caractéristiques de base",20,INK,true));gap(parent,9);
+        int[] values=character?ArchetypeRules.finalStats(profile,race,origin):profile.stats;
+        for(int i=0;i<values.length;i++){
+            String name=ArchetypeRules.ABBREVIATIONS[i]+" · "+ArchetypeRules.LABELS[i];
+            int bonus=values[i]-profile.stats[i];profileRow(parent,name,values[i]+(bonus>0?" (+"+bonus+")":""));
+        }
+        if(character){gap(parent,8);parent.addView(text("Race : "+race+" · Origine : "+origin,14,0xff75572f,false));}
+        gap(parent,15);parent.addView(text("Combat",20,INK,true));gap(parent,8);
+        profileRow(parent,"Points de vie",Integer.toString(profile.pv));profileRow(parent,"Armure",Integer.toString(profile.armor));
+        profileRow(parent,"Dégâts",profile.damage);profileRow(parent,"Pénétration",profile.penetration>0?Integer.toString(profile.penetration):"—");
+        gap(parent,15);parent.addView(text("Compétences et capacités",20,INK,true));gap(parent,8);
+        for(String ability:profile.abilities){TextView item=text("• "+ability,16,INK,false);item.setPadding(dp(5),dp(5),dp(5),dp(5));parent.addView(item);}
+    }
     private Spinner characterChoice(LinearLayout parent,String title,String[] choices,String current){
         label(parent,title);ArrayList<String> values=new ArrayList<>();values.add("Choisir…");
         values.addAll(Arrays.asList(choices));int selected=values.indexOf(current);
@@ -467,6 +503,7 @@ public final class MainActivity extends Activity {
             p.addView(button("Ouvrir la fiche",()->{openCharacter=c.id;show();}));}
     }
     private void characterDetail(){TavernDb.Character found=null;for(TavernDb.Character c:db.characters(accountId))if(c.id==openCharacter)found=c;final TavernDb.Character c=found;if(c==null){openCharacter=-1;characterList();return;}body.addView(button("‹  Mes personnages",()->{openCharacter=-1;show();}));gap(body,20);title(c.name);
+        LinearLayout generated=panel();showProfile(generated,ArchetypeRules.forName(c.role),c.origin,c.background);
         LinearLayout sheet=panel();sheet.addView(text("Fiche du personnage",23,INK,true));gap(sheet,16);label(sheet,"Nom");EditText name=input(sheet,"Nom",c.name,1);
         Spinner archetype=characterChoice(sheet,"Archétype de classe",ARCHETYPES,c.role);
         Spinner race=characterChoice(sheet,"Race",RACES,c.origin);Spinner origin=originChoice(sheet,c.background);

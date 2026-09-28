@@ -2,7 +2,7 @@ name: Android unsigned release
 on:
   workflow_dispatch:
   push:
-    branches: [main, build-v0-32-inventory, fix-v034-campaign, fix-v034-dice]
+    branches: [main, build-v0-32-inventory, fix-v034-campaign, fix-v034-dice, feature-archetypes-v035]
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -24,10 +24,3 @@ jobs:
           actual=$($ANDROID_HOME/build-tools/36.0.0/aapt dump badging app/build/outputs/apk/release/app-release-unsigned.apk | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -1)
           test -n "$expected" && test "$actual" = "$expected"
       - run: $ANDROID_HOME/build-tools/36.0.0/zipalign -p -f 4 app/build/outputs/apk/release/app-release-unsigned.apk app-release-aligned.apk
-      - run: cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" apksigner.jar
-      - uses: actions/upload-artifact@v4
-        with:
-          name: taverne-android-unsigned
-          path: |
-            app-release-aligned.apk
-            apksigner.jar
