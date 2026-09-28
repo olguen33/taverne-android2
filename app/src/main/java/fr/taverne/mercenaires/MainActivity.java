@@ -430,7 +430,7 @@ public final class MainActivity extends Activity {
         int[] values=character?ArchetypeRules.finalStats(profile,race,origin):profile.stats;
         for(int i=0;i<values.length;i++){
             String name=ArchetypeRules.ABBREVIATIONS[i]+" · "+ArchetypeRules.LABELS[i];
-            int bonus=values[i]-profile.stats[i];profileRow(parent,name,values[i]+(bonus>0?" (+"+bonus+")":""));
+            profileRow(parent,name,Integer.toString(values[i]));
         }
         if(character){gap(parent,8);parent.addView(text("Race : "+race+" · Origine : "+origin,14,0xff75572f,false));}
         gap(parent,15);parent.addView(text("Combat",20,INK,true));gap(parent,8);
@@ -456,8 +456,8 @@ public final class MainActivity extends Activity {
         ArrayList<String> parts=new ArrayList<>();for(String value:new String[]{character.origin,character.role,character.background})if(!value.isEmpty())parts.add(value);
         return parts.isEmpty()?"Fiche à compléter":android.text.TextUtils.join(" · ",parts);
     }
-    private Spinner originChoice(LinearLayout parent,String current){
-        Spinner spinner=characterChoice(parent,"Origine",ORIGINS,ORIGIN_CHOICES,current);
+    private Spinner originChoice(LinearLayout parent,String current,boolean showBonus){
+        Spinner spinner=characterChoice(parent,"Origine",ORIGINS,showBonus?ORIGIN_CHOICES:ORIGINS,current);
         TextView description=text("Sélectionne une origine pour voir sa description.",14,0xff526056,false);parent.addView(description);gap(parent,16);
         spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
             public void onItemSelected(AdapterView<?> view,View selected,int position,long id){
@@ -514,7 +514,7 @@ public final class MainActivity extends Activity {
     private String slotLabel(TavernDb.MjSlot slot){return WEEKDAYS[slot.weekday]+" · "+timeLabel(slot.startMinute)+" – "+timeLabel(slot.endMinute)+(slot.endMinute<slot.startMinute?" (lendemain)":"");}
     private void characterList(){title("Personnages");characterTabs();LinearLayout create=panel();label(create,"Nouveau personnage");EditText name=input(create,"Nom du personnage","",1);
         Spinner archetype=characterChoice(create,"Archétype de classe",ARCHETYPES,"");
-        Spinner race=characterChoice(create,"Race",RACES,RACE_CHOICES,"");Spinner origin=originChoice(create,"");
+        Spinner race=characterChoice(create,"Race",RACES,RACE_CHOICES,"");Spinner origin=originChoice(create,"",true);
         create.addView(button("Créer",()->{String value=name.getText().toString().trim();if(value.isEmpty()){info("Indique un nom.");return;}
             if(archetype.getSelectedItemPosition()==0||race.getSelectedItemPosition()==0||origin.getSelectedItemPosition()==0){info("Choisis un archétype, une race et une origine.");return;}
             openCharacter=db.addCharacter(accountId,value,selectedChoice(race),selectedChoice(archetype),selectedChoice(origin));show();}));
@@ -526,7 +526,7 @@ public final class MainActivity extends Activity {
         LinearLayout generated=panel();showProfile(generated,ArchetypeRules.forName(c.role),c.origin,c.background);
         LinearLayout sheet=panel();sheet.addView(text("Fiche du personnage",23,INK,true));gap(sheet,16);label(sheet,"Nom");EditText name=input(sheet,"Nom",c.name,1);
         Spinner archetype=characterChoice(sheet,"Archétype de classe",ARCHETYPES,c.role);
-        Spinner race=characterChoice(sheet,"Race",RACES,RACE_CHOICES,c.origin);Spinner origin=originChoice(sheet,c.background);
+        Spinner race=characterChoice(sheet,"Race",RACES,c.origin);Spinner origin=originChoice(sheet,c.background,false);
         label(sheet,"Fiche et notes");EditText notes=input(sheet,"Caractéristiques, compétences, équipement…",c.sheet,7);
         LinearLayout inventoryPanel=panel();inventoryPanel.addView(text("Inventaire",23,INK,true));gap(inventoryPanel,12);EditText inventory=input(inventoryPanel,"Un objet et sa quantité par ligne",c.inventory,7);
         LinearLayout history=panel();history.addView(text("Son histoire",23,INK,true));gap(history,16);label(history,"Lore du personnage");EditText lore=input(history,"Origines, passé, relations, ambitions…",c.lore,10);
