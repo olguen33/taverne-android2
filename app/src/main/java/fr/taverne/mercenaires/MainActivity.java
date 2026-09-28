@@ -45,6 +45,8 @@ import java.util.List;
 import java.util.ArrayList;
 import android.widget.AdapterView;
 import java.util.Locale;
+import java.util.HashMap;
+import java.util.Map;
 
 public final class MainActivity extends Activity {
     private static final String[] WEEKDAYS={"Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"};
@@ -73,6 +75,9 @@ public final class MainActivity extends Activity {
     private static final String[] MJ_TABS={"Publier contrat","Mes contrats","Placer une rumeur","Mes rumeurs","Cartes","Mes cartes","Bestiaire"};
     private TavernDb db;
     private LinearLayout body,root;
+    private ScrollView pageScroll;
+    private String renderedPage;
+    private final Map<String,Integer> scrollPositions=new HashMap<>();
     private String section="accueil";
     private int charactersPage=0,mjPage=-1;
     private int openArchetype=-1;
@@ -125,7 +130,13 @@ public final class MainActivity extends Activity {
     private void title(String value){TextView eyebrow=text("COMPAGNIE DES MERCENAIRES",12,GOLD,true);eyebrow.setLetterSpacing(.12f);body.addView(eyebrow);gap(body,9);TextView h=text(value,38,0xffe8e1d0,true);body.addView(h);gap(body,24);}
     private void info(String message){Toast.makeText(this,message,Toast.LENGTH_SHORT).show();}
     private void enterSection(String target){section=target;show();}
+    private String pageKey(){
+        return accountId+":"+section+":"+charactersPage+":"+openArchetype+":"+openCharacter+":"+openContract+":"+mjPage+":"+campaignCharacter+":"+expandedCampaignPanel;
+    }
     private void show(){
+        if(pageScroll!=null&&renderedPage!=null)scrollPositions.put(renderedPage,pageScroll.getScrollY());
+        pageScroll=null;
+        renderedPage=pageKey();
         root=column();root.setBackgroundColor(FOREST);
         root.setOnApplyWindowInsetsListener((view,insets)->{
             int top,bottom;
@@ -143,13 +154,15 @@ public final class MainActivity extends Activity {
         TextView brand=text("La Taverne",24,0xffe8e1d0,true);header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));TextView gear=gearMenu();header.addView(gear,new LinearLayout.LayoutParams(dp(52),dp(52)));
         if(section.equals("carte")){showMap();}
         else{
-        ScrollView scroll=new ScrollView(this);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));body=column();body.setPadding(dp(16),dp(24),dp(16),dp(28));scroll.addView(body);
+        ScrollView scroll=new ScrollView(this);pageScroll=scroll;root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));body=column();body.setPadding(dp(16),dp(24),dp(16),dp(28));scroll.addView(body);
         if(section.equals("contrats")){if(openContract<0)contractList();else contractDetail();}
         else if(section.equals("rumeurs"))rumoursScreen();
         else if(section.equals("personnages")){if(charactersPage==1){if(openArchetype>=0)archetypeDetail(openArchetype);else archetypeScreen();}else if(openCharacter<0)characterList();else characterDetail();}
         else if(section.equals("mj"))masterScreen();
         else if(section.equals("campagne"))campaignScreen();
         else if(section.equals("boutique"))placeholderScreen("Boutique");
+        Integer savedPosition=scrollPositions.get(renderedPage);
+        if(savedPosition!=null)scroll.post(()->scroll.scrollTo(0,savedPosition));
         }
         }
         if(section.equals("campagne")&&expandedCampaignPanel>=0)return;
