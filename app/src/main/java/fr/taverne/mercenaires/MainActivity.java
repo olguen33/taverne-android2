@@ -300,7 +300,21 @@ public final class MainActivity extends Activity {
             heading.addView(expand,new LinearLayout.LayoutParams(dp(44),dp(44)));expand.setOnClickListener(v->{expandedCampaignPanel=expandedCampaignPanel==index?-1:index;show();});gap(card,12);
             if(i==0){card.addView(text(characterSummary(character),17,INK,false));gap(card,12);if(!character.sheet.isEmpty()){card.addView(text(character.sheet,16,INK,false));gap(card,12);}card.addView(button("Ouvrir et modifier la fiche",()->{openCharacter=character.id;enterSection("personnages");}));}
             else if(i==1){EditText inventory=input(card,"Un objet et sa quantité par ligne",character.inventory,5);card.addView(button("Enregistrer l’inventaire",()->{db.setInventory(accountId,character.id,inventory.getText().toString());info("Inventaire enregistré.");}));}
-            else if(i==2){LinearLayout dice=column();card.addView(dice);TextView result=text("Choisis un dé à lancer.",18,INK,false);for(int sides:new int[]{4,6,8,10,12,20,100}){Button roll=button("D"+sides,()->result.setText("D"+sides+" : "+(1+new java.security.SecureRandom().nextInt(sides))));LinearLayout.LayoutParams diceParams=new LinearLayout.LayoutParams(-1,dp(46));diceParams.bottomMargin=dp(6);dice.addView(roll,diceParams);}gap(card,8);card.addView(result);}
+            else if(i==2){LinearLayout dice=column();card.addView(dice);TextView result=text("Choisis un dé et sa quantité, puis touche D pour lancer.",18,INK,false);
+                java.security.SecureRandom random=new java.security.SecureRandom();
+                for(int sides:new int[]{4,6,8,10,12,20,100}){
+                    final int[] count={1};LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);
+                    LinearLayout.LayoutParams rowParams=new LinearLayout.LayoutParams(-1,dp(50));rowParams.bottomMargin=dp(7);dice.addView(row,rowParams);
+                    Button roll=button("D"+sides,()->{
+                        int total=0;StringBuilder detail=new StringBuilder();
+                        for(int n=0;n<count[0];n++){int value=1+random.nextInt(sides);total+=value;if(n>0)detail.append(" + ");detail.append(value);}
+                        result.setText(count[0]+"D"+sides+" : "+detail+" = "+total);
+                    });row.addView(roll,new LinearLayout.LayoutParams(0,-1,1));
+                    TextView number=text("1",19,INK,true);number.setGravity(Gravity.CENTER);
+                    Button less=button("‹",()->{if(count[0]>1)count[0]--;number.setText(Integer.toString(count[0]));});less.setContentDescription("Retirer un D"+sides);row.addView(less,new LinearLayout.LayoutParams(dp(44),-1));
+                    row.addView(number,new LinearLayout.LayoutParams(dp(38),-1));
+                    Button more=button("›",()->{if(count[0]<100)count[0]++;number.setText(Integer.toString(count[0]));});more.setContentDescription("Ajouter un D"+sides);row.addView(more,new LinearLayout.LayoutParams(dp(44),-1));
+                }gap(card,8);card.addView(result);}
             else{EditText notes=input(card,"Notes de campagne…",db.campaignNotes(accountId,character.id),6);card.addView(button("Enregistrer la note",()->{db.setCampaignNotes(accountId,character.id,notes.getText().toString());info("Note enregistrée.");}));}
         }
     }

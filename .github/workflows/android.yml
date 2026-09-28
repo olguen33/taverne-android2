@@ -2,7 +2,7 @@ name: Android unsigned release
 on:
   workflow_dispatch:
   push:
-    branches: [main, build-v0-32-inventory, fix-v034-campaign]
+    branches: [main, build-v0-32-inventory, fix-v034-campaign, fix-v034-dice]
 jobs:
   build:
     runs-on: ubuntu-latest

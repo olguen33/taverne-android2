@@ -6,8 +6,8 @@ android {
         applicationId = "fr.taverne.mercenaires.updatable"
         minSdk = 26
         targetSdk = 35
-        versionCode = 35
-        versionName = "0.34.1"
+        versionCode = 36
+        versionName = "0.34.2"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
