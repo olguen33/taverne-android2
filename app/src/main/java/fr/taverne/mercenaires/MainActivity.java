@@ -64,7 +64,9 @@ public final class MainActivity extends Activity {
         "Suit les pistes et connaît les créatures des terres sauvages."
     };
     private static final String[] RACES={"Humain","Orc","Nain","Elfe"};
+    private static final String[] RACE_CHOICES={"Humain · Intelligence +10","Orc · Force +10","Nain · Endurance +10","Elfe · Agilité +10"};
     private static final String[] ORIGINS={"Citadin","Reclu","Vie sauvage"};
+    private static final String[] ORIGIN_CHOICES={"Citadin · Sociabilité +10","Reclu · Force mentale +10","Vie sauvage · Perception +10"};
     private static final String[] ORIGIN_DESCRIPTIONS={
         "A grandi en ville, au milieu des métiers, des marchés et des intrigues.",
         "A vécu à l’écart, seul ou dans une communauté isolée.",
@@ -438,20 +440,24 @@ public final class MainActivity extends Activity {
         for(String ability:profile.abilities){TextView item=text("• "+ability,16,INK,false);item.setPadding(dp(5),dp(5),dp(5),dp(5));parent.addView(item);}
     }
     private Spinner characterChoice(LinearLayout parent,String title,String[] choices,String current){
+        return characterChoice(parent,title,choices,choices,current);
+    }
+    private Spinner characterChoice(LinearLayout parent,String title,String[] choices,String[] displayed,String current){
         label(parent,title);ArrayList<String> values=new ArrayList<>();values.add("Choisir…");
-        values.addAll(Arrays.asList(choices));int selected=values.indexOf(current);
-        if(selected<0&&!current.isEmpty()){values.add(current);selected=values.size()-1;}
+        values.addAll(Arrays.asList(displayed));int index=Arrays.asList(choices).indexOf(current);int selected=index+1;
+        if(index<0&&!current.isEmpty()){values.add(current);selected=values.size()-1;}
         Spinner spinner=new Spinner(this);ArrayAdapter<String> adapter=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,values);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);spinner.setAdapter(adapter);
+        spinner.setTag(choices);
         parent.addView(spinner);spinner.setSelection(Math.max(0,selected));gap(parent,16);return spinner;
     }
-    private String selectedChoice(Spinner spinner){return spinner.getSelectedItemPosition()==0?"":spinner.getSelectedItem().toString();}
+    private String selectedChoice(Spinner spinner){int position=spinner.getSelectedItemPosition();if(position==0)return "";String[] choices=(String[])spinner.getTag();return position<=choices.length?choices[position-1]:spinner.getSelectedItem().toString();}
     private String characterSummary(TavernDb.Character character){
         ArrayList<String> parts=new ArrayList<>();for(String value:new String[]{character.origin,character.role,character.background})if(!value.isEmpty())parts.add(value);
         return parts.isEmpty()?"Fiche à compléter":android.text.TextUtils.join(" · ",parts);
     }
     private Spinner originChoice(LinearLayout parent,String current){
-        Spinner spinner=characterChoice(parent,"Origine",ORIGINS,current);
+        Spinner spinner=characterChoice(parent,"Origine",ORIGINS,ORIGIN_CHOICES,current);
         TextView description=text("Sélectionne une origine pour voir sa description.",14,0xff526056,false);parent.addView(description);gap(parent,16);
         spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
             public void onItemSelected(AdapterView<?> view,View selected,int position,long id){
@@ -508,7 +514,7 @@ public final class MainActivity extends Activity {
     private String slotLabel(TavernDb.MjSlot slot){return WEEKDAYS[slot.weekday]+" · "+timeLabel(slot.startMinute)+" – "+timeLabel(slot.endMinute)+(slot.endMinute<slot.startMinute?" (lendemain)":"");}
     private void characterList(){title("Personnages");characterTabs();LinearLayout create=panel();label(create,"Nouveau personnage");EditText name=input(create,"Nom du personnage","",1);
         Spinner archetype=characterChoice(create,"Archétype de classe",ARCHETYPES,"");
-        Spinner race=characterChoice(create,"Race",RACES,"");Spinner origin=originChoice(create,"");
+        Spinner race=characterChoice(create,"Race",RACES,RACE_CHOICES,"");Spinner origin=originChoice(create,"");
         create.addView(button("Créer",()->{String value=name.getText().toString().trim();if(value.isEmpty()){info("Indique un nom.");return;}
             if(archetype.getSelectedItemPosition()==0||race.getSelectedItemPosition()==0||origin.getSelectedItemPosition()==0){info("Choisis un archétype, une race et une origine.");return;}
             openCharacter=db.addCharacter(accountId,value,selectedChoice(race),selectedChoice(archetype),selectedChoice(origin));show();}));
@@ -520,7 +526,7 @@ public final class MainActivity extends Activity {
         LinearLayout generated=panel();showProfile(generated,ArchetypeRules.forName(c.role),c.origin,c.background);
         LinearLayout sheet=panel();sheet.addView(text("Fiche du personnage",23,INK,true));gap(sheet,16);label(sheet,"Nom");EditText name=input(sheet,"Nom",c.name,1);
         Spinner archetype=characterChoice(sheet,"Archétype de classe",ARCHETYPES,c.role);
-        Spinner race=characterChoice(sheet,"Race",RACES,c.origin);Spinner origin=originChoice(sheet,c.background);
+        Spinner race=characterChoice(sheet,"Race",RACES,RACE_CHOICES,c.origin);Spinner origin=originChoice(sheet,c.background);
         label(sheet,"Fiche et notes");EditText notes=input(sheet,"Caractéristiques, compétences, équipement…",c.sheet,7);
         LinearLayout inventoryPanel=panel();inventoryPanel.addView(text("Inventaire",23,INK,true));gap(inventoryPanel,12);EditText inventory=input(inventoryPanel,"Un objet et sa quantité par ligne",c.inventory,7);
         LinearLayout history=panel();history.addView(text("Son histoire",23,INK,true));gap(history,16);label(history,"Lore du personnage");EditText lore=input(history,"Origines, passé, relations, ambitions…",c.lore,10);
