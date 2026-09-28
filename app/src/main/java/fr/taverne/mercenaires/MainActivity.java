@@ -67,9 +67,9 @@ public final class MainActivity extends Activity {
     private static final String[] RACE_CHOICES={"Humain · Intelligence +10","Orc · Force +10","Nain · Endurance +10","Elfe · Agilité +10"};
     private static final String[] ORIGINS={"Citadin","Reclu","Vie sauvage"};
     private static final String[] ORIGIN_CHOICES={"Citadin · Sociabilité +10","Reclu · Force mentale +10","Vie sauvage · Perception +10"};
-    private static final String[] SHOP_ITEMS={"Petite potion de soin","Grande potion de soin","Antidote","Potion de vigueur","Potion de concentration","Bandage","Fumigène","Fiole d’huile"};
-    private static final String[] SHOP_EFFECTS={"Rend 1D6 PV","Rend 2D6 PV","Neutralise un poison ordinaire (accord du MJ)","Aide à récupérer après un effort (accord du MJ)","Aide à se concentrer (accord du MJ)","Permet de panser une blessure","Crée un écran de fumée bref","Alimente une lampe ou peut être versée"};
-    private static final int[] SHOP_PRICES={200,450,150,180,220,60,120,40};
+    private static final String[] SHOP_ITEMS={"Petite potion de soin","Grande potion de soin","Antidote","Potion de concentration","Bandage","Fumigène","Fiole d’huile","Collet","Piège à pointes","Piège à mâchoires"};
+    private static final String[] SHOP_EFFECTS={"Rend 1D6 PV","Rend 2D6 PV","Neutralise un poison ordinaire (accord du MJ)","Aide à se concentrer (accord du MJ)","Permet de panser une blessure","Crée un écran de fumée bref","Alimente une lampe ou peut être versée","Piège à usage unique pour immobiliser une petite proie","Piège à usage unique : 1D10 dégâts, pénétration 1","Piège à usage unique : 1D10 dégâts, pénétration 2"};
+    private static final int[] SHOP_PRICES={200,450,150,220,60,120,40,90,180,250};
     private static final String[] ORIGIN_DESCRIPTIONS={
         "A grandi en ville, au milieu des métiers, des marchés et des intrigues.",
         "A vécu à l’écart, seul ou dans une communauté isolée.",
