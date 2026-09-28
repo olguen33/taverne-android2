@@ -14,11 +14,11 @@ import javax.crypto.spec.PBEKeySpec;
 
 final class TavernDb extends SQLiteOpenHelper {
     private static final int HASH_ITERATIONS=600000;
-    TavernDb(Context context) { super(context, "taverne.db", null, 12); }
+    TavernDb(Context context) { super(context, "taverne.db", null, 13); }
     @Override public void onCreate(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE accounts(id INTEGER PRIMARY KEY AUTOINCREMENT, pseudo TEXT NOT NULL COLLATE NOCASE UNIQUE, salt BLOB NOT NULL, password_hash BLOB NOT NULL)");
         db.execSQL("CREATE TABLE characters(id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER REFERENCES accounts(id), name TEXT NOT NULL, origin TEXT NOT NULL DEFAULT '', role TEXT NOT NULL DEFAULT '', background TEXT NOT NULL DEFAULT '', sheet TEXT NOT NULL DEFAULT '', lore TEXT NOT NULL DEFAULT '', inventory TEXT NOT NULL DEFAULT '', campaign_notes TEXT NOT NULL DEFAULT '', gold INTEGER NOT NULL DEFAULT 0, file_uri TEXT)");
-        db.execSQL("CREATE TABLE contracts(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, description TEXT NOT NULL, reward TEXT NOT NULL DEFAULT '', danger INTEGER NOT NULL DEFAULT 1, places INTEGER NOT NULL DEFAULT 4, status TEXT NOT NULL DEFAULT 'ouvert', proposer_id INTEGER REFERENCES accounts(id))");
+        db.execSQL("CREATE TABLE contracts(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, description TEXT NOT NULL, reward TEXT NOT NULL DEFAULT '', danger INTEGER NOT NULL DEFAULT 1, places INTEGER NOT NULL DEFAULT 4, status TEXT NOT NULL DEFAULT 'ouvert', paid_out INTEGER NOT NULL DEFAULT 0, proposer_id INTEGER REFERENCES accounts(id))");
         db.execSQL("CREATE TABLE participants(id INTEGER PRIMARY KEY AUTOINCREMENT, contract_id INTEGER NOT NULL, character_id INTEGER NOT NULL, UNIQUE(contract_id, character_id))");
         db.execSQL("CREATE TABLE messages(id INTEGER PRIMARY KEY AUTOINCREMENT, contract_id INTEGER NOT NULL, character_id INTEGER NOT NULL, body TEXT NOT NULL, created_at INTEGER NOT NULL)");
         db.execSQL("CREATE TABLE dates(id INTEGER PRIMARY KEY AUTOINCREMENT, contract_id INTEGER NOT NULL, character_id INTEGER NOT NULL, proposed_at TEXT NOT NULL, UNIQUE(contract_id, character_id, proposed_at))");
@@ -41,6 +41,7 @@ final class TavernDb extends SQLiteOpenHelper {
         if(oldVersion<10)db.execSQL("ALTER TABLE characters ADD COLUMN inventory TEXT NOT NULL DEFAULT ''");
         if(oldVersion<11)db.execSQL("ALTER TABLE characters ADD COLUMN campaign_notes TEXT NOT NULL DEFAULT ''");
         if(oldVersion<12)db.execSQL("ALTER TABLE characters ADD COLUMN gold INTEGER NOT NULL DEFAULT 0");
+        if(oldVersion<13)db.execSQL("ALTER TABLE contracts ADD COLUMN paid_out INTEGER NOT NULL DEFAULT 0");
     }
     private byte[] hash(char[] password,byte[] salt){PBEKeySpec spec=new PBEKeySpec(password,salt,HASH_ITERATIONS,256);try{return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded();}catch(Exception e){throw new IllegalStateException("Impossible de protéger le mot de passe",e);}finally{spec.clearPassword();}}
     long createAccount(String pseudo,char[] password){byte[] salt=new byte[16];new SecureRandom().nextBytes(salt);byte[] digest=hash(password,salt);SQLiteDatabase db=getWritableDatabase();db.beginTransaction();try{ContentValues v=new ContentValues();v.put("pseudo",pseudo);v.put("salt",salt);v.put("password_hash",digest);long id=db.insertWithOnConflict("accounts",null,v,SQLiteDatabase.CONFLICT_IGNORE);if(id<0)return -1;db.execSQL("UPDATE characters SET owner_id=? WHERE owner_id IS NULL",new Object[]{id});db.setTransactionSuccessful();return id;}finally{db.endTransaction();}}
@@ -82,11 +83,43 @@ final class TavernDb extends SQLiteOpenHelper {
             db.setTransactionSuccessful();return id;
         }finally{db.endTransaction();}
     }
-    void setStatus(long id,long proposerId,String status) {ContentValues v=new ContentValues();v.put("status",status);getWritableDatabase().update("contracts",v,"id=? AND proposer_id=?",new String[]{Long.toString(id),Long.toString(proposerId)});}
+    private long goldReward(String reward){
+        if(reward==null||!reward.trim().matches("(?i)[0-9][0-9\\s\\u00a0]*(?:\\s*(?:po|pièces?\\s+d['’]or|or))?"))throw new IllegalArgumentException("Indique une récompense en pièces d’or (ex. 1 200 po).");
+        try{long amount=Long.parseLong(reward.replaceAll("[^0-9]",""));if(amount<=0||amount>1000000000L)throw new NumberFormatException();return amount;}
+        catch(NumberFormatException e){throw new IllegalArgumentException("La récompense doit être comprise entre 1 et 1 milliard de pièces d’or.");}
+    }
+    long setStatus(long id,long proposerId,String status){
+        if(!status.equals("ouvert")&&!status.equals("planifié")&&!status.equals("terminé"))throw new IllegalArgumentException("Statut inconnu.");
+        SQLiteDatabase database=getWritableDatabase();database.beginTransaction();try{
+            String[] args={Long.toString(id),Long.toString(proposerId)};String reward;boolean paid;
+            try(Cursor c=database.rawQuery("SELECT reward,paid_out FROM contracts WHERE id=? AND proposer_id=?",args)){
+                if(!c.moveToFirst())throw new IllegalArgumentException("Contrat introuvable.");reward=c.getString(0);paid=c.getInt(1)!=0;
+            }
+            long distributed=0;
+            if(status.equals("terminé")&&!paid){
+                long amount=goldReward(reward);List<Long> recipients=new ArrayList<>();
+                try(Cursor c=database.rawQuery("SELECT c.id FROM participants p JOIN characters c ON c.id=p.character_id WHERE p.contract_id=? ORDER BY p.id",new String[]{Long.toString(id)})){while(c.moveToNext())recipients.add(c.getLong(0));}
+                if(recipients.isEmpty())throw new IllegalArgumentException("Aucun personnage inscrit : impossible de partager la récompense.");
+                long share=amount/recipients.size(),remainder=amount%recipients.size();
+                for(int i=0;i<recipients.size();i++){
+                    long part=share+(i<remainder?1:0);long characterId=recipients.get(i);
+                    try(Cursor c=database.rawQuery("SELECT gold FROM characters WHERE id=?",new String[]{Long.toString(characterId)})){
+                        if(!c.moveToFirst()||c.getLong(0)>1000000000L-part)throw new IllegalArgumentException("La bourse d’un participant dépasse la limite autorisée.");
+                    }
+                    database.execSQL("UPDATE characters SET gold=gold+? WHERE id=?",new Object[]{part,characterId});
+                }
+                distributed=amount;
+            }
+            ContentValues values=new ContentValues();values.put("status",status);if(distributed>0)values.put("paid_out",1);
+            if(database.update("contracts",values,"id=? AND proposer_id=?",args)!=1)throw new IllegalArgumentException("Contrat introuvable.");
+            database.setTransactionSuccessful();return distributed;
+        }finally{database.endTransaction();}
+    }
     boolean updateContract(long id,long proposerId,String title,String description,String reward,int danger,int places,boolean[] days,int startMinute,int endMinute){
         if(days.length!=7||startMinute<0||startMinute>=1440||endMinute<0||endMinute>=1440||startMinute==endMinute)return false;
         boolean any=false;for(boolean day:days)any|=day;if(!any)return false;
         SQLiteDatabase db=getWritableDatabase();db.beginTransaction();try{
+            try(Cursor c=db.rawQuery("SELECT paid_out,reward FROM contracts WHERE id=? AND proposer_id=?",new String[]{Long.toString(id),Long.toString(proposerId)})){if(!c.moveToFirst()||(c.getInt(0)!=0&&!c.getString(1).equals(reward)))return false;}
             ContentValues v=new ContentValues();v.put("title",title);v.put("description",description);v.put("reward",reward);v.put("danger",danger);v.put("places",places);
             if(db.update("contracts",v,"id=? AND proposer_id=?",new String[]{Long.toString(id),Long.toString(proposerId)})!=1)return false;
             // Conserve les votes des créneaux identiques ; retire ceux des créneaux supprimés.

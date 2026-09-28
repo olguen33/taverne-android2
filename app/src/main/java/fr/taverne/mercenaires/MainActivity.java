@@ -635,7 +635,7 @@ public final class MainActivity extends Activity {
             LinearLayout p=panel();p.addView(text(c.title+" · "+c.status,18,INK,true));gap(p,12);
             p.addView(button("Modifier ou supprimer",()->{editingContractId=c.id;mjPage=0;show();}));gap(p,8);
             LinearLayout row=new LinearLayout(this);p.addView(row);
-            for(String status:new String[]{"ouvert","planifié","terminé"}){Button b=button(status,()->{db.setStatus(c.id,accountId,status);show();});LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(44),1);lp.setMargins(dp(2),0,dp(2),dp(12));row.addView(b,lp);}
+            for(String status:new String[]{"ouvert","planifié","terminé"}){Button b=button(status,()->{try{long distributed=db.setStatus(c.id,accountId,status);info(distributed>0?distributed+" pièces d’or partagées entre les participants.":"Statut mis à jour.");show();}catch(IllegalArgumentException e){info(e.getMessage());}});LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(44),1);lp.setMargins(dp(2),0,dp(2),dp(12));row.addView(b,lp);}
         }
         if(!any)mjPlaceholder("Aucun contrat publié");
     }
