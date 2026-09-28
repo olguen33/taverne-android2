@@ -3,6 +3,7 @@ package fr.taverne.mercenaires;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.TimePickerDialog;
+import android.app.DatePickerDialog;
 import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.os.Build;
@@ -45,6 +46,8 @@ import java.util.List;
 import java.util.ArrayList;
 import android.widget.AdapterView;
 import java.util.Locale;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -519,7 +522,7 @@ public final class MainActivity extends Activity {
         if(slots.isEmpty())availability.addView(text("Aucune disponibilité indiquée pour cet ancien contrat.",15,INK,false));
         for(TavernDb.MjSlot slot:slots){
             List<String> voters=db.slotVoters(slot.id);
-            availability.addView(text(slotLabel(slot)+(c.lockedSlotId==slot.id?" · DATE VERROUILLÉE":"")+" · "+slot.votes+" vote"+(slot.votes>1?"s":""),16,INK,false));
+            availability.addView(text(slotLabel(slot)+(c.lockedSlotId==slot.id?" · "+(c.lockedDate.isEmpty()?"DATE À CHOISIR":calendarDate(c.lockedDate)):"")+" · "+slot.votes+" vote"+(slot.votes>1?"s":""),16,INK,false));
             availability.addView(text(voters.isEmpty()?"Aucun votant":android.text.TextUtils.join(", ",voters),14,0xff526056,false));
             gap(availability,10);
         }
@@ -539,6 +542,22 @@ public final class MainActivity extends Activity {
     }
     private String timeLabel(int minute){return String.format(Locale.FRANCE,"%02d:%02d",minute/60,minute%60);}
     private String slotLabel(TavernDb.MjSlot slot){return WEEKDAYS[slot.weekday]+" · "+timeLabel(slot.startMinute)+" – "+timeLabel(slot.endMinute)+(slot.endMinute<slot.startMinute?" (lendemain)":"");}
+    private String calendarDate(String iso){return LocalDate.parse(iso).format(DateTimeFormatter.ofPattern("EEEE d MMMM yyyy",Locale.FRANCE));}
+    private void chooseContractDate(TavernDb.Contract contract,TavernDb.MjSlot slot){
+        LocalDate today=LocalDate.now();LocalDate first=today.plusDays((slot.weekday-(today.getDayOfWeek().getValue()-1)+7)%7);
+        DatePickerDialog picker=new DatePickerDialog(this,(view,year,month,day)->{
+            LocalDate chosen=LocalDate.of(year,month+1,day);
+            if(chosen.getDayOfWeek().getValue()-1!=slot.weekday){info("Choisis un "+WEEKDAYS[slot.weekday].toLowerCase(Locale.FRANCE)+" sur le calendrier.");return;}
+            new AlertDialog.Builder(this).setTitle("Verrouiller la date ?")
+                .setMessage(calendarDate(chosen.toString())+" · "+slotLabel(slot))
+                .setNegativeButton("Annuler",null).setPositiveButton("Verrouiller",(dialog,which)->{
+                    if(db.lockSlot(contract.id,accountId,slot.id,chosen.toString())){info("Date du contrat verrouillée.");show();}
+                    else info("Impossible de verrouiller cette date.");
+                }).show();
+        },first.getYear(),first.getMonthValue()-1,first.getDayOfMonth());
+        java.util.Calendar minimum=java.util.Calendar.getInstance();minimum.set(java.util.Calendar.HOUR_OF_DAY,0);minimum.set(java.util.Calendar.MINUTE,0);minimum.set(java.util.Calendar.SECOND,0);minimum.set(java.util.Calendar.MILLISECOND,0);
+        picker.getDatePicker().setMinDate(minimum.getTimeInMillis());picker.show();
+    }
     private void characterList(){title("Personnages");characterTabs();LinearLayout create=panel();label(create,"Nouveau personnage");EditText name=input(create,"Nom du personnage","",1);
         Spinner archetype=characterChoice(create,"Archétype de classe",ARCHETYPES,"");
         Spinner race=characterChoice(create,"Race",RACES,RACE_CHOICES,"");Spinner origin=originChoice(create,"",true);
@@ -638,11 +657,12 @@ public final class MainActivity extends Activity {
             if(c.lockedSlotId<0&&!c.status.equals("terminé")){
                 p.addView(text("Choisir et verrouiller la date",17,INK,true));gap(p,8);
                 for(TavernDb.MjSlot slot:slots){p.addView(text(slotLabel(slot)+" · "+slot.votes+" vote"+(slot.votes>1?"s":""),15,INK,false));gap(p,5);
-                    p.addView(button("Verrouiller cette date",()->new AlertDialog.Builder(this).setTitle("Confirmer la date ?")
-                        .setMessage(slotLabel(slot)+" sera la date du contrat.").setNegativeButton("Annuler",null)
-                        .setPositiveButton("Verrouiller",(dialog,which)->{if(db.lockSlot(c.id,accountId,slot.id)){info("Date verrouillée.");show();}else info("Impossible de verrouiller cette date.");}).show()));gap(p,10);
+                    p.addView(button("Choisir la date sur le calendrier",()->chooseContractDate(c,slot)));gap(p,10);
                 }
-            }else for(TavernDb.MjSlot slot:slots)if(slot.id==c.lockedSlotId){p.addView(text("Date verrouillée : "+slotLabel(slot),16,INK,true));gap(p,10);break;}
+            }else for(TavernDb.MjSlot slot:slots)if(slot.id==c.lockedSlotId){
+                p.addView(text(c.lockedDate.isEmpty()?"Créneau choisi : "+slotLabel(slot):"Date verrouillée : "+calendarDate(c.lockedDate)+" · "+slotLabel(slot),16,INK,true));gap(p,10);
+                if(c.lockedDate.isEmpty()&&!c.status.equals("terminé")){p.addView(button("Fixer la date sur le calendrier",()->chooseContractDate(c,slot)));gap(p,10);}break;
+            }
             LinearLayout row=new LinearLayout(this);p.addView(row);
             if(c.status.equals("ouvert")){Button open=button("ouvert",()->info("Le contrat est déjà ouvert."));row.addView(open,new LinearLayout.LayoutParams(0,dp(44),1));}
             Button finish=button("Terminer le contrat",()->new AlertDialog.Builder(this).setTitle("Terminer le contrat ?")
