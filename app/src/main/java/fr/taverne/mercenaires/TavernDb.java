@@ -14,11 +14,11 @@ import javax.crypto.spec.PBEKeySpec;
 
 final class TavernDb extends SQLiteOpenHelper {
     private static final int HASH_ITERATIONS=600000;
-    TavernDb(Context context) { super(context, "taverne.db", null, 13); }
+    TavernDb(Context context) { super(context, "taverne.db", null, 14); }
     @Override public void onCreate(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE accounts(id INTEGER PRIMARY KEY AUTOINCREMENT, pseudo TEXT NOT NULL COLLATE NOCASE UNIQUE, salt BLOB NOT NULL, password_hash BLOB NOT NULL)");
         db.execSQL("CREATE TABLE characters(id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER REFERENCES accounts(id), name TEXT NOT NULL, origin TEXT NOT NULL DEFAULT '', role TEXT NOT NULL DEFAULT '', background TEXT NOT NULL DEFAULT '', sheet TEXT NOT NULL DEFAULT '', lore TEXT NOT NULL DEFAULT '', inventory TEXT NOT NULL DEFAULT '', campaign_notes TEXT NOT NULL DEFAULT '', gold INTEGER NOT NULL DEFAULT 0, file_uri TEXT)");
-        db.execSQL("CREATE TABLE contracts(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, description TEXT NOT NULL, reward TEXT NOT NULL DEFAULT '', danger INTEGER NOT NULL DEFAULT 1, places INTEGER NOT NULL DEFAULT 4, status TEXT NOT NULL DEFAULT 'ouvert', paid_out INTEGER NOT NULL DEFAULT 0, proposer_id INTEGER REFERENCES accounts(id))");
+        db.execSQL("CREATE TABLE contracts(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, description TEXT NOT NULL, reward TEXT NOT NULL DEFAULT '', danger INTEGER NOT NULL DEFAULT 1, places INTEGER NOT NULL DEFAULT 4, status TEXT NOT NULL DEFAULT 'ouvert', paid_out INTEGER NOT NULL DEFAULT 0, locked_slot_id INTEGER, proposer_id INTEGER REFERENCES accounts(id))");
         db.execSQL("CREATE TABLE participants(id INTEGER PRIMARY KEY AUTOINCREMENT, contract_id INTEGER NOT NULL, character_id INTEGER NOT NULL, UNIQUE(contract_id, character_id))");
         db.execSQL("CREATE TABLE messages(id INTEGER PRIMARY KEY AUTOINCREMENT, contract_id INTEGER NOT NULL, character_id INTEGER NOT NULL, body TEXT NOT NULL, created_at INTEGER NOT NULL)");
         db.execSQL("CREATE TABLE dates(id INTEGER PRIMARY KEY AUTOINCREMENT, contract_id INTEGER NOT NULL, character_id INTEGER NOT NULL, proposed_at TEXT NOT NULL, UNIQUE(contract_id, character_id, proposed_at))");
@@ -42,6 +42,7 @@ final class TavernDb extends SQLiteOpenHelper {
         if(oldVersion<11)db.execSQL("ALTER TABLE characters ADD COLUMN campaign_notes TEXT NOT NULL DEFAULT ''");
         if(oldVersion<12)db.execSQL("ALTER TABLE characters ADD COLUMN gold INTEGER NOT NULL DEFAULT 0");
         if(oldVersion<13)db.execSQL("ALTER TABLE contracts ADD COLUMN paid_out INTEGER NOT NULL DEFAULT 0");
+        if(oldVersion<14)db.execSQL("ALTER TABLE contracts ADD COLUMN locked_slot_id INTEGER");
     }
     private byte[] hash(char[] password,byte[] salt){PBEKeySpec spec=new PBEKeySpec(password,salt,HASH_ITERATIONS,256);try{return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded();}catch(Exception e){throw new IllegalStateException("Impossible de protéger le mot de passe",e);}finally{spec.clearPassword();}}
     long createAccount(String pseudo,char[] password){byte[] salt=new byte[16];new SecureRandom().nextBytes(salt);byte[] digest=hash(password,salt);SQLiteDatabase db=getWritableDatabase();db.beginTransaction();try{ContentValues v=new ContentValues();v.put("pseudo",pseudo);v.put("salt",salt);v.put("password_hash",digest);long id=db.insertWithOnConflict("accounts",null,v,SQLiteDatabase.CONFLICT_IGNORE);if(id<0)return -1;db.execSQL("UPDATE characters SET owner_id=? WHERE owner_id IS NULL",new Object[]{id});db.setTransactionSuccessful();return id;}finally{db.endTransaction();}}
@@ -88,15 +89,28 @@ final class TavernDb extends SQLiteOpenHelper {
         try{long amount=Long.parseLong(reward.replaceAll("[^0-9]",""));if(amount<=0||amount>1000000000L)throw new NumberFormatException();return amount;}
         catch(NumberFormatException e){throw new IllegalArgumentException("La récompense doit être comprise entre 1 et 1 milliard de pièces d’or.");}
     }
-    long setStatus(long id,long proposerId,String status){
-        if(!status.equals("ouvert")&&!status.equals("planifié")&&!status.equals("terminé"))throw new IllegalArgumentException("Statut inconnu.");
+    boolean lockSlot(long contractId,long proposerId,long slotId){
         SQLiteDatabase database=getWritableDatabase();database.beginTransaction();try{
-            String[] args={Long.toString(id),Long.toString(proposerId)};String reward;boolean paid;
-            try(Cursor c=database.rawQuery("SELECT reward,paid_out FROM contracts WHERE id=? AND proposer_id=?",args)){
-                if(!c.moveToFirst())throw new IllegalArgumentException("Contrat introuvable.");reward=c.getString(0);paid=c.getInt(1)!=0;
+            try(Cursor c=database.rawQuery("SELECT status,locked_slot_id FROM contracts WHERE id=? AND proposer_id=?",new String[]{Long.toString(contractId),Long.toString(proposerId)})){
+                if(!c.moveToFirst()||c.getString(0).equals("terminé")||!c.isNull(1))return false;
             }
+            try(Cursor c=database.rawQuery("SELECT 1 FROM mj_slots WHERE id=? AND contract_id=? AND proposer_id=?",new String[]{Long.toString(slotId),Long.toString(contractId),Long.toString(proposerId)})){if(!c.moveToFirst())return false;}
+            ContentValues values=new ContentValues();values.put("locked_slot_id",slotId);values.put("status","planifié");
+            if(database.update("contracts",values,"id=? AND proposer_id=?",new String[]{Long.toString(contractId),Long.toString(proposerId)})!=1)return false;
+            database.setTransactionSuccessful();return true;
+        }finally{database.endTransaction();}
+    }
+    long setStatus(long id,long proposerId,String status){
+        if(!status.equals("ouvert")&&!status.equals("terminé"))throw new IllegalArgumentException("Statut inconnu.");
+        SQLiteDatabase database=getWritableDatabase();database.beginTransaction();try{
+            String[] args={Long.toString(id),Long.toString(proposerId)};String reward,currentStatus;boolean paid,locked;
+            try(Cursor c=database.rawQuery("SELECT reward,paid_out,locked_slot_id,status FROM contracts WHERE id=? AND proposer_id=?",args)){
+                if(!c.moveToFirst())throw new IllegalArgumentException("Contrat introuvable.");reward=c.getString(0);paid=c.getInt(1)!=0;locked=!c.isNull(2);currentStatus=c.getString(3);
+            }
+            if(status.equals("ouvert")&&(locked||paid))throw new IllegalArgumentException("La date verrouillée ne peut pas être rouverte.");
             long distributed=0;
             if(status.equals("terminé")&&!paid){
+                if(!locked&&!currentStatus.equals("terminé"))throw new IllegalArgumentException("Verrouille d’abord une date dans Mes contrats.");
                 long amount=goldReward(reward);List<Long> recipients=new ArrayList<>();
                 try(Cursor c=database.rawQuery("SELECT c.id FROM participants p JOIN characters c ON c.id=p.character_id WHERE p.contract_id=? ORDER BY p.id",new String[]{Long.toString(id)})){while(c.moveToNext())recipients.add(c.getLong(0));}
                 if(recipients.isEmpty())throw new IllegalArgumentException("Aucun personnage inscrit : impossible de partager la récompense.");
@@ -119,12 +133,12 @@ final class TavernDb extends SQLiteOpenHelper {
         if(days.length!=7||startMinute<0||startMinute>=1440||endMinute<0||endMinute>=1440||startMinute==endMinute)return false;
         boolean any=false;for(boolean day:days)any|=day;if(!any)return false;
         SQLiteDatabase db=getWritableDatabase();db.beginTransaction();try{
-            try(Cursor c=db.rawQuery("SELECT paid_out,reward FROM contracts WHERE id=? AND proposer_id=?",new String[]{Long.toString(id),Long.toString(proposerId)})){if(!c.moveToFirst()||(c.getInt(0)!=0&&!c.getString(1).equals(reward)))return false;}
+            long lockedSlot=-1;try(Cursor c=db.rawQuery("SELECT paid_out,reward,locked_slot_id FROM contracts WHERE id=? AND proposer_id=?",new String[]{Long.toString(id),Long.toString(proposerId)})){if(!c.moveToFirst()||(c.getInt(0)!=0&&!c.getString(1).equals(reward)))return false;if(!c.isNull(2))lockedSlot=c.getLong(2);}
             ContentValues v=new ContentValues();v.put("title",title);v.put("description",description);v.put("reward",reward);v.put("danger",danger);v.put("places",places);
             if(db.update("contracts",v,"id=? AND proposer_id=?",new String[]{Long.toString(id),Long.toString(proposerId)})!=1)return false;
             // Conserve les votes des créneaux identiques ; retire ceux des créneaux supprimés.
             try(Cursor c=db.rawQuery("SELECT id,weekday,start_minute,end_minute FROM mj_slots WHERE contract_id=? AND proposer_id=?",new String[]{Long.toString(id),Long.toString(proposerId)})){
-                while(c.moveToNext()){long slotId=c.getLong(0);int day=c.getInt(1);if(!days[day]||c.getInt(2)!=startMinute||c.getInt(3)!=endMinute){db.delete("slot_votes","slot_id=?",new String[]{Long.toString(slotId)});db.delete("mj_slots","id=?",new String[]{Long.toString(slotId)});}}
+                while(c.moveToNext()){long slotId=c.getLong(0);int day=c.getInt(1);if(!days[day]||c.getInt(2)!=startMinute||c.getInt(3)!=endMinute){if(slotId==lockedSlot)return false;db.delete("slot_votes","slot_id=?",new String[]{Long.toString(slotId)});db.delete("mj_slots","id=?",new String[]{Long.toString(slotId)});}}
             }
             for(int day=0;day<7;day++)if(days[day]){ContentValues slot=new ContentValues();slot.put("contract_id",id);slot.put("proposer_id",proposerId);slot.put("weekday",day);slot.put("start_minute",startMinute);slot.put("end_minute",endMinute);db.insertWithOnConflict("mj_slots",null,slot,SQLiteDatabase.CONFLICT_IGNORE);}
             db.setTransactionSuccessful();return true;
@@ -170,7 +184,7 @@ final class TavernDb extends SQLiteOpenHelper {
     void addMessage(long contractId,long characterId,long ownerId,String body) {if(!owns(getReadableDatabase(),ownerId,characterId))return;ContentValues v=new ContentValues();v.put("contract_id",contractId);v.put("character_id",characterId);v.put("body",body);v.put("created_at",System.currentTimeMillis());getWritableDatabase().insertOrThrow("messages",null,v);}
     void addDate(long contractId,long characterId,long ownerId,String value) {if(!owns(getReadableDatabase(),ownerId,characterId))return;ContentValues v=new ContentValues();v.put("contract_id",contractId);v.put("character_id",characterId);v.put("proposed_at",value);getWritableDatabase().insertWithOnConflict("dates",null,v,SQLiteDatabase.CONFLICT_IGNORE);}
     List<Character> characters(long ownerId) {List<Character> out=new ArrayList<>();try(Cursor c=getReadableDatabase().rawQuery("SELECT id,name,origin,role,background,sheet,lore,file_uri,inventory,gold FROM characters WHERE owner_id=? ORDER BY id DESC",new String[]{Long.toString(ownerId)})){while(c.moveToNext())out.add(new Character(c.getLong(0),c.getString(1),c.getString(2),c.getString(3),c.getString(4),c.getString(5),c.getString(6),c.getString(7),c.getString(8),c.getLong(9)));}return out;}
-    List<Contract> contracts() {List<Contract> out=new ArrayList<>();try(Cursor c=getReadableDatabase().rawQuery("SELECT c.id,c.title,c.description,c.reward,c.danger,c.places,c.status,(SELECT COUNT(*) FROM participants p WHERE p.contract_id=c.id),COALESCE(a.pseudo, ''),COALESCE(c.proposer_id,-1) FROM contracts c LEFT JOIN accounts a ON a.id=c.proposer_id ORDER BY c.id DESC",null)){while(c.moveToNext())out.add(new Contract(c.getLong(0),c.getString(1),c.getString(2),c.getString(3),c.getInt(4),c.getInt(5),c.getString(6),c.getInt(7),c.getString(8),c.getLong(9)));}return out;}
+    List<Contract> contracts() {List<Contract> out=new ArrayList<>();try(Cursor c=getReadableDatabase().rawQuery("SELECT c.id,c.title,c.description,c.reward,c.danger,c.places,c.status,(SELECT COUNT(*) FROM participants p WHERE p.contract_id=c.id),COALESCE(a.pseudo, ''),COALESCE(c.proposer_id,-1),COALESCE(c.locked_slot_id,-1) FROM contracts c LEFT JOIN accounts a ON a.id=c.proposer_id ORDER BY c.id DESC",null)){while(c.moveToNext())out.add(new Contract(c.getLong(0),c.getString(1),c.getString(2),c.getString(3),c.getInt(4),c.getInt(5),c.getString(6),c.getInt(7),c.getString(8),c.getLong(9),c.getLong(10)));}return out;}
     List<String> slotVoters(long slotId) {return names("SELECT COALESCE(a.pseudo, c.name) || ' (' || c.name || ')' FROM slot_votes v JOIN characters c ON c.id=v.character_id LEFT JOIN accounts a ON a.id=c.owner_id WHERE v.slot_id=? ORDER BY a.pseudo COLLATE NOCASE, c.name COLLATE NOCASE",slotId);}
     List<String> participants(long id) {return names("SELECT c.name FROM participants p JOIN characters c ON c.id=p.character_id WHERE p.contract_id=? ORDER BY p.id",id);}
     List<String> messages(long id) {return names("SELECT c.name || ' : ' || m.body FROM messages m JOIN characters c ON c.id=m.character_id WHERE m.contract_id=? ORDER BY m.id",id);}
@@ -222,7 +236,7 @@ final class TavernDb extends SQLiteOpenHelper {
         return getWritableDatabase().update("points_of_interest",v,"id=? AND owner_id=?",new String[]{Long.toString(id),Long.toString(ownerId)})==1;
     }
     boolean deleteInterest(long id,long ownerId){return getWritableDatabase().delete("points_of_interest","id=? AND owner_id=?",new String[]{Long.toString(id),Long.toString(ownerId)})==1;}
-    static final class Contract {final long id,proposerId;final String title,description,reward,status,proposer;final int danger,places,count;Contract(long id,String title,String description,String reward,int danger,int places,String status,int count,String proposer,long proposerId){this.id=id;this.proposerId=proposerId;this.title=title;this.description=description;this.reward=reward;this.danger=danger;this.places=places;this.status=status;this.count=count;this.proposer=proposer;}}
+    static final class Contract {final long id,proposerId,lockedSlotId;final String title,description,reward,status,proposer;final int danger,places,count;Contract(long id,String title,String description,String reward,int danger,int places,String status,int count,String proposer,long proposerId,long lockedSlotId){this.id=id;this.proposerId=proposerId;this.lockedSlotId=lockedSlotId;this.title=title;this.description=description;this.reward=reward;this.danger=danger;this.places=places;this.status=status;this.count=count;this.proposer=proposer;}}
     static final class DungeonMap {final long id;final String name,uri;DungeonMap(long id,String name,String uri){this.id=id;this.name=name;this.uri=uri;}}
     long addDungeonMap(long ownerId,String name,String uri){ContentValues v=new ContentValues();v.put("owner_id",ownerId);v.put("name",name);v.put("uri",uri);return getWritableDatabase().insert("dungeon_maps",null,v);}
     List<DungeonMap> dungeonMaps(long ownerId){List<DungeonMap> out=new ArrayList<>();try(Cursor c=getReadableDatabase().rawQuery("SELECT id,name,uri FROM dungeon_maps WHERE owner_id=? ORDER BY id DESC",new String[]{Long.toString(ownerId)})){while(c.moveToNext())out.add(new DungeonMap(c.getLong(0),c.getString(1),c.getString(2)));}return out;}

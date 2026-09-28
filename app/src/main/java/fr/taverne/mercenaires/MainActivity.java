@@ -519,7 +519,7 @@ public final class MainActivity extends Activity {
         if(slots.isEmpty())availability.addView(text("Aucune disponibilité indiquée pour cet ancien contrat.",15,INK,false));
         for(TavernDb.MjSlot slot:slots){
             List<String> voters=db.slotVoters(slot.id);
-            availability.addView(text(slotLabel(slot)+" · "+slot.votes+" vote"+(slot.votes>1?"s":""),16,INK,false));
+            availability.addView(text(slotLabel(slot)+(c.lockedSlotId==slot.id?" · DATE VERROUILLÉE":"")+" · "+slot.votes+" vote"+(slot.votes>1?"s":""),16,INK,false));
             availability.addView(text(voters.isEmpty()?"Aucun votant":android.text.TextUtils.join(", ",voters),14,0xff526056,false));
             gap(availability,10);
         }
@@ -634,8 +634,21 @@ public final class MainActivity extends Activity {
         boolean any=false;for(TavernDb.Contract c:db.contracts())if(c.proposerId==accountId){any=true;
             LinearLayout p=panel();p.addView(text(c.title+" · "+c.status,18,INK,true));gap(p,12);
             p.addView(button("Modifier ou supprimer",()->{editingContractId=c.id;mjPage=0;show();}));gap(p,8);
+            List<TavernDb.MjSlot> slots=db.mjSlots(c.id);
+            if(c.lockedSlotId<0&&!c.status.equals("terminé")){
+                p.addView(text("Choisir et verrouiller la date",17,INK,true));gap(p,8);
+                for(TavernDb.MjSlot slot:slots){p.addView(text(slotLabel(slot)+" · "+slot.votes+" vote"+(slot.votes>1?"s":""),15,INK,false));gap(p,5);
+                    p.addView(button("Verrouiller cette date",()->new AlertDialog.Builder(this).setTitle("Confirmer la date ?")
+                        .setMessage(slotLabel(slot)+" sera la date du contrat.").setNegativeButton("Annuler",null)
+                        .setPositiveButton("Verrouiller",(dialog,which)->{if(db.lockSlot(c.id,accountId,slot.id)){info("Date verrouillée.");show();}else info("Impossible de verrouiller cette date.");}).show()));gap(p,10);
+                }
+            }else for(TavernDb.MjSlot slot:slots)if(slot.id==c.lockedSlotId){p.addView(text("Date verrouillée : "+slotLabel(slot),16,INK,true));gap(p,10);break;}
             LinearLayout row=new LinearLayout(this);p.addView(row);
-            for(String status:new String[]{"ouvert","planifié","terminé"}){Button b=button(status,()->{try{long distributed=db.setStatus(c.id,accountId,status);info(distributed>0?distributed+" pièces d’or partagées entre les participants.":"Statut mis à jour.");show();}catch(IllegalArgumentException e){info(e.getMessage());}});LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(44),1);lp.setMargins(dp(2),0,dp(2),dp(12));row.addView(b,lp);}
+            if(c.status.equals("ouvert")){Button open=button("ouvert",()->info("Le contrat est déjà ouvert."));row.addView(open,new LinearLayout.LayoutParams(0,dp(44),1));}
+            Button finish=button("Terminer le contrat",()->new AlertDialog.Builder(this).setTitle("Terminer le contrat ?")
+                .setMessage("La récompense sera partagée entre les personnages inscrits et versée dans leurs bourses une seule fois.")
+                .setNegativeButton("Annuler",null).setPositiveButton("Terminer",(dialog,which)->{try{long distributed=db.setStatus(c.id,accountId,"terminé");info(distributed>0?distributed+" pièces d’or partagées entre les participants.":"Contrat déjà terminé.");show();}catch(IllegalArgumentException e){info(e.getMessage());}}).show());
+            row.addView(finish,new LinearLayout.LayoutParams(0,dp(44),2));
         }
         if(!any)mjPlaceholder("Aucun contrat publié");
     }
