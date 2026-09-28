@@ -67,6 +67,9 @@ public final class MainActivity extends Activity {
     private static final String[] RACE_CHOICES={"Humain · Intelligence +10","Orc · Force +10","Nain · Endurance +10","Elfe · Agilité +10"};
     private static final String[] ORIGINS={"Citadin","Reclu","Vie sauvage"};
     private static final String[] ORIGIN_CHOICES={"Citadin · Sociabilité +10","Reclu · Force mentale +10","Vie sauvage · Perception +10"};
+    private static final String[] SHOP_ITEMS={"Petite potion de soin","Grande potion de soin","Antidote","Potion de vigueur","Potion de concentration","Bandage","Fumigène","Fiole d’huile"};
+    private static final String[] SHOP_EFFECTS={"Rend 1D6 PV","Rend 2D6 PV","Neutralise un poison ordinaire (accord du MJ)","Aide à récupérer après un effort (accord du MJ)","Aide à se concentrer (accord du MJ)","Permet de panser une blessure","Crée un écran de fumée bref","Alimente une lampe ou peut être versée"};
+    private static final int[] SHOP_PRICES={200,450,150,180,220,60,120,40};
     private static final String[] ORIGIN_DESCRIPTIONS={
         "A grandi en ville, au milieu des métiers, des marchés et des intrigues.",
         "A vécu à l’écart, seul ou dans une communauté isolée.",
@@ -89,6 +92,7 @@ public final class MainActivity extends Activity {
     private long editingContractId=-1;
     private long openCharacter=-1;
     private long campaignCharacter=-1;
+    private long shopCharacterId=-1;
     private int expandedCampaignPanel=-1;
     private long accountId=-1;
     private boolean creatingAccount=false;
@@ -162,7 +166,7 @@ public final class MainActivity extends Activity {
         else if(section.equals("personnages")){if(charactersPage==1){if(openArchetype>=0)archetypeDetail(openArchetype);else archetypeScreen();}else if(openCharacter<0)characterList();else characterDetail();}
         else if(section.equals("mj"))masterScreen();
         else if(section.equals("campagne"))campaignScreen();
-        else if(section.equals("boutique"))placeholderScreen("Boutique");
+        else if(section.equals("boutique"))shopScreen();
         Integer savedPosition=scrollPositions.get(renderedPage);
         if(savedPosition!=null)scroll.post(()->scroll.scrollTo(0,savedPosition));
         }
@@ -317,7 +321,7 @@ public final class MainActivity extends Activity {
             TextView name=text(headings[i],22,INK,true);heading.addView(name,new LinearLayout.LayoutParams(0,-2,1));
             heading.addView(expand,new LinearLayout.LayoutParams(dp(44),dp(44)));expand.setOnClickListener(v->{expandedCampaignPanel=expandedCampaignPanel==index?-1:index;show();});gap(card,12);
             if(i==0){card.addView(text(characterSummary(character),17,INK,false));gap(card,12);showProfile(card,ArchetypeRules.forName(character.role),character.origin,character.background);if(!character.sheet.isEmpty()){gap(card,12);card.addView(text(character.sheet,16,INK,false));}gap(card,12);card.addView(button("Ouvrir et modifier la fiche",()->{openCharacter=character.id;charactersPage=0;enterSection("personnages");}));}
-            else if(i==1){EditText inventory=input(card,"Un objet et sa quantité par ligne",character.inventory,5);card.addView(button("Enregistrer l’inventaire",()->{db.setInventory(accountId,character.id,inventory.getText().toString());info("Inventaire enregistré.");}));}
+            else if(i==1){card.addView(text("Bourse : "+character.gold+" pièces d’or",17,INK,true));gap(card,12);EditText inventory=input(card,"Un objet et sa quantité par ligne",character.inventory,5);card.addView(button("Enregistrer l’inventaire",()->{db.setInventory(accountId,character.id,inventory.getText().toString());info("Inventaire enregistré.");}));}
             else if(i==2){LinearLayout dice=column();card.addView(dice);TextView result=text("Choisis un dé et sa quantité, puis touche D pour lancer.",18,INK,false);
                 java.security.SecureRandom random=new java.security.SecureRandom();
                 for(int sides:new int[]{4,6,8,10,12,20,100}){
@@ -386,6 +390,29 @@ public final class MainActivity extends Activity {
             }).show();
     }
     private void placeholderScreen(String name){title(name);LinearLayout p=panel();p.addView(text("À venir",23,INK,true));gap(p,10);p.addView(text("Cet espace sera développé plus tard.",16,INK,false));}
+    private void shopScreen(){
+        title("Boutique");List<TavernDb.Character> characters=db.characters(accountId);
+        if(characters.isEmpty()){LinearLayout empty=panel();empty.addView(text("Crée un personnage pour acheter des consommables.",17,INK,false));gap(empty,12);empty.addView(button("Créer un personnage",()->enterSection("personnages")));return;}
+        LinearLayout selection=panel();label(selection,"Personnage qui reçoit les achats");String[] names=new String[characters.size()];int selected=0;
+        for(int i=0;i<characters.size();i++){names[i]=characters.get(i).name;if(characters.get(i).id==shopCharacterId)selected=i;}
+        Spinner chosen=new Spinner(this);ArrayAdapter<String> adapter=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,names);adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);chosen.setAdapter(adapter);selection.addView(chosen);chosen.setSelection(selected);gap(selection,12);
+        TextView balance=text("",17,INK,true);selection.addView(balance);
+        chosen.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> parent,View view,int position,long id){TavernDb.Character character=characters.get(position);shopCharacterId=character.id;balance.setText("Bourse : "+character.gold+" pièces d’or");}public void onNothingSelected(AdapterView<?> parent){}});
+        gap(selection,8);selection.addView(text("Tu peux renseigner la bourse sur la fiche du personnage.",14,INK,false));
+        for(int i=0;i<SHOP_ITEMS.length;i++){
+            final int index=i;LinearLayout item=panel();item.addView(text(SHOP_ITEMS[i],22,INK,true));gap(item,5);
+            item.addView(text(SHOP_EFFECTS[i],15,INK,false));gap(item,7);item.addView(text(SHOP_PRICES[i]+" pièces d’or",17,INK,true));gap(item,12);
+            item.addView(button("Acheter pour "+SHOP_PRICES[i]+" pièces d’or",()->{
+                TavernDb.Character target=characters.get(chosen.getSelectedItemPosition());
+                new AlertDialog.Builder(this).setTitle("Acheter "+SHOP_ITEMS[index]+" ?")
+                    .setMessage("Pour "+target.name+" · "+SHOP_PRICES[index]+" pièces d’or. L’objet ira dans son inventaire.")
+                    .setNegativeButton("Annuler",null).setPositiveButton("Acheter",(dialog,which)->{
+                        if(db.purchase(accountId,target.id,SHOP_ITEMS[index],SHOP_PRICES[index])){info("Achat ajouté à l’inventaire de "+target.name+".");shopCharacterId=target.id;show();}
+                        else info("Achat impossible : vérifie la bourse du personnage.");
+                    }).show();
+            }));
+        }
+    }
     private void subTabs(String first,String second,boolean firstActive,Runnable openFirst,Runnable openSecond){
         LinearLayout row=new LinearLayout(this);body.addView(row);Button left=button(first,openFirst),right=button(second,openSecond);
         left.setBackground(background(firstActive?0xff8f6b2e:0xff275340,9));right.setBackground(background(firstActive?0xff275340:0xff8f6b2e,9));
@@ -529,10 +556,13 @@ public final class MainActivity extends Activity {
         Spinner race=characterChoice(sheet,"Race",RACES,c.origin);Spinner origin=originChoice(sheet,c.background,false);
         label(sheet,"Fiche et notes");EditText notes=input(sheet,"Caractéristiques, compétences, équipement…",c.sheet,7);
         LinearLayout inventoryPanel=panel();inventoryPanel.addView(text("Inventaire",23,INK,true));gap(inventoryPanel,12);EditText inventory=input(inventoryPanel,"Un objet et sa quantité par ligne",c.inventory,7);
+        LinearLayout purse=panel();purse.addView(text("Bourse",23,INK,true));gap(purse,10);label(purse,"Pièces d’or");EditText gold=input(purse,"0",Long.toString(c.gold),1);gold.setInputType(InputType.TYPE_CLASS_NUMBER);
         LinearLayout history=panel();history.addView(text("Son histoire",23,INK,true));gap(history,16);label(history,"Lore du personnage");EditText lore=input(history,"Origines, passé, relations, ambitions…",c.lore,10);
         LinearLayout attachment=panel();attachment.addView(text("Fichier de fiche",23,INK,true));gap(attachment,12);if(c.fileUri!=null){attachment.addView(button("Ouvrir le fichier joint",()->{Intent view=new Intent(Intent.ACTION_VIEW,Uri.parse(c.fileUri));view.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);try{startActivity(view);}catch(Exception e){info("Aucune application ne peut ouvrir ce fichier.");}}));gap(attachment,10);}attachment.addView(button("Joindre un PDF ou une image",()->{Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT);pick.setType("*/*");pick.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"application/pdf","image/png","image/jpeg","image/webp"});pick.addCategory(Intent.CATEGORY_OPENABLE);pick.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);startActivityForResult(pick,PICK_SHEET);}));
         body.addView(button("Enregistrer les modifications",()->{String value=name.getText().toString().trim();if(value.isEmpty()){info("Indique un nom.");return;}
+            long amount;try{amount=Long.parseLong(gold.getText().toString());}catch(NumberFormatException e){info("Indique un nombre de pièces d’or valide.");return;}if(amount<0||amount>1000000000L){info("La bourse doit contenir entre 0 et 1 milliard de pièces d’or.");return;}
             db.updateCharacter(accountId,c.id,value,selectedChoice(race),selectedChoice(archetype),selectedChoice(origin),notes.getText().toString(),lore.getText().toString(),inventory.getText().toString());
+            db.setGold(accountId,c.id,amount);
             info("Personnage enregistré.");show();}));
     }
     private void masterScreen(){

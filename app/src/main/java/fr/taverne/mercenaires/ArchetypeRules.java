@@ -21,7 +21,7 @@ final class ArchetypeRules {
         new Profile("Archer",new int[]{70,30,40,70,20,40,30,60,50},12,3,"1D10 + A",2,"Visée : 1 tour = +20 CT"),
         new Profile("Roublard",new int[]{50,50,30,60,30,70,20,60,40},12,2,"2D6 + A",1,"Mensonge : S +10","Vol : A +10","Fuite : A +10","Discrétion : A +10"),
         new Profile("Barbare",new int[]{60,40,70,60,70,20,70,60,10},18,0,"2D10 + F",4,"Pas de parade ; esquive −20","Coup puissant : 2 degrés de réussite nécessaires pour parer"),
-        new Profile("Enquêteur",new int[]{30,50,40,50,20,70,60,70,70},12,2,"1D10 (arbalète)",6,"Enquête : S / P / I +10"),
+        new Profile("Enquêteur",new int[]{30,50,40,50,20,70,60,70,70},12,2,"1D10",6,"Enquête : S / P / I +10"),
         new Profile("Explorateur",new int[]{50,40,60,60,40,30,50,70,50},13,3,"1D10 + 4",3,"Vision de loin : P +10","Fouille : P +10","Orientation : P +10"),
         new Profile("Paladin",new int[]{20,70,60,30,60,20,60,20,50},15,5,"1D10 + 4 + F",0,"Serviable : obligé d'aider ; ne touche que la moitié des primes, donne le reste","Soin : rend 1D6 PV","Lumière de Dieu : aveugle les ennemis ; leur fait perdre 1 tour","Parade : +15","Première ligne : toujours devant le danger"),
         new Profile("Assassin",new int[]{70,50,30,70,30,20,40,50,50},12,2,"2D6 + A",2,"Intrusion : +10","Discrétion : +10","Attaque multiple : attaque 3 fois, doit se reposer au tour d'après"),
