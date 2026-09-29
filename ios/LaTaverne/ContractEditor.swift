@@ -4,9 +4,16 @@ struct ContractEditor: View {
     @EnvironmentObject var game: GameStore
     @Environment(\.dismiss) var dismiss
     let id: String?
-    @State private var title = "", description = "", reward = "", danger = 1, places = 4
-    @State private var days: Set<Int> = [], start = Calendar.current.date(from:DateComponents(hour:19)) ?? Date(), end = Calendar.current.date(from:DateComponents(hour:23)) ?? Date()
-    @State private var x: CGFloat = -1, y: CGFloat = -1
+    @State private var title = ""
+    @State private var description = ""
+    @State private var reward = ""
+    @State private var danger = 1
+    @State private var places = 4
+    @State private var days: Set<Int> = []
+    @State private var start = Calendar.current.date(from:DateComponents(hour:19)) ?? Date()
+    @State private var end = Calendar.current.date(from:DateComponents(hour:23)) ?? Date()
+    @State private var x: CGFloat = -1
+    @State private var y: CGFloat = -1
 
     var body: some View {
         Form {

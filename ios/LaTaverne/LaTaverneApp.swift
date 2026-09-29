@@ -29,7 +29,9 @@ struct MainTabs: View {
 
 struct LoginScreen: View {
     @EnvironmentObject var game: GameStore
-    @State private var email = "", password = "", pseudo = ""
+    @State private var email = ""
+    @State private var password = ""
+    @State private var pseudo = ""
     @State private var registering = false
     var body: some View {
         NavigationStack {

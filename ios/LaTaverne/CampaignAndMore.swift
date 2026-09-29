@@ -2,7 +2,8 @@ import SwiftUI
 
 struct CampaignScreen: View {
     @EnvironmentObject var game: GameStore
-    @State private var title = "", bodyText = ""
+    @State private var title = ""
+    @State private var bodyText = ""
     var body: some View {
         List {
             Section("Mon personnage") {
@@ -41,7 +42,8 @@ struct CampaignScreen: View {
 struct CharacterCampaign: View {
     @EnvironmentObject var game: GameStore
     let id: String
-    @State private var inventory = "", notes = ""
+    @State private var inventory = ""
+    @State private var notes = ""
     var body: some View {
         let c=game.characters.first { value($0,"id") == id } ?? [:]
         List {
@@ -158,7 +160,9 @@ struct GameMapScreen: View {
 }
 
 struct DiceScreen: View {
-    @State private var sides=20,count=1,result=""
+    @State private var sides=20
+    @State private var count=1
+    @State private var result=""
     var body: some View {
         Form {
             Picker("Dé",selection:$sides) {
@@ -176,8 +180,10 @@ struct DiceScreen: View {
 
 struct MasterScreen: View {
     @EnvironmentObject var game: GameStore
-    @State private var publishing = false, rumour = ""
-    @State private var x:CGFloat = -1,y:CGFloat = -1
+    @State private var publishing = false
+    @State private var rumour = ""
+    @State private var x:CGFloat = -1
+    @State private var y:CGFloat = -1
     var body: some View {
         List {
             Section("Contrats") { Button("Publier un contrat") { publishing = true } }

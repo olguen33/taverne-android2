@@ -10,7 +10,8 @@ private func slotText(_ s: Row) -> String {
 
 struct ContractsScreen: View {
     @EnvironmentObject var game: GameStore
-    @State private var completed = false, publishing = false
+    @State private var completed = false
+    @State private var publishing = false
     var body: some View {
         List {
             Picker("Contrats",selection:$completed) {
@@ -42,9 +43,13 @@ struct ContractDetail: View {
     @EnvironmentObject var game: GameStore
     @Environment(\.dismiss) var dismiss
     let contractID: String
-    @State private var chosenCharacter = "", selectedSlots: Set<String> = []
-    @State private var message = "", editing = false, deleting = false
-    @State private var lockingSlot: SlotSelection?, chosenDate = Date()
+    @State private var chosenCharacter = ""
+    @State private var selectedSlots: Set<String> = []
+    @State private var message = ""
+    @State private var editing = false
+    @State private var deleting = false
+    @State private var lockingSlot: SlotSelection?
+    @State private var chosenDate = Date()
     var body: some View {
         let c = game.contracts.first { value($0,"id") == contractID } ?? [:]
         let slots = game.slots.filter { value($0,"contract_id") == contractID }

@@ -33,12 +33,22 @@ private enum Vault {
 }
 
 @MainActor final class GameStore: ObservableObject {
-    @Published var authenticated = false, busy = false
-    @Published var error: String?, notice: String?
+    @Published var authenticated = false
+    @Published var busy = false
+    @Published var error: String?
+    @Published var notice: String?
     @Published var pseudo = ""
-    @Published var profiles: [Row] = [], characters: [Row] = [], contracts: [Row] = []
-    @Published var slots: [Row] = [], participants: [Row] = [], votes: [Row] = [], messages: [Row] = []
-    @Published var catalog: [Row] = [], rumours: [Row] = [], campaignEntries: [Row] = [], names: [Row] = []
+    @Published var profiles: [Row] = []
+    @Published var characters: [Row] = []
+    @Published var contracts: [Row] = []
+    @Published var slots: [Row] = []
+    @Published var participants: [Row] = []
+    @Published var votes: [Row] = []
+    @Published var messages: [Row] = []
+    @Published var catalog: [Row] = []
+    @Published var rumours: [Row] = []
+    @Published var campaignEntries: [Row] = []
+    @Published var names: [Row] = []
     private(set) var userId = ""
     private var token = ""
     private let base = "https://dgvvocfpxflmfqaaakoe.supabase.co"

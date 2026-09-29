@@ -62,7 +62,8 @@ struct CharacterDetail: View {
     @EnvironmentObject var game: GameStore
     @Environment(\.dismiss) var dismiss
     let characterID: String
-    @State private var editing = false, deleting = false
+    @State private var editing = false
+    @State private var deleting = false
     @State private var gold = ""
     var body: some View {
         let c = game.characters.first { value($0,"id") == characterID } ?? [:]
@@ -102,8 +103,14 @@ struct CharacterEditor: View {
     @EnvironmentObject var game: GameStore
     @Environment(\.dismiss) var dismiss
     let id: String?
-    @State private var name = "", race = "Humain", role = "Guerrier", origin = "Citadin"
-    @State private var sheet = "", lore = "", inventory = "", notes = ""
+    @State private var name = ""
+    @State private var race = "Humain"
+    @State private var role = "Guerrier"
+    @State private var origin = "Citadin"
+    @State private var sheet = ""
+    @State private var lore = ""
+    @State private var inventory = ""
+    @State private var notes = ""
     var body: some View {
         Form {
             Section("Identité") {
