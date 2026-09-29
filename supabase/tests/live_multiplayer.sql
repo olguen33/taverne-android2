@@ -12,11 +12,20 @@ begin
  perform set_config('request.jwt.claim.sub',a::text,true);
  perform public.set_pseudo('Essai A');
  ct:=public.publish_contract('Essai multijoueur','Contrat temporaire',401,2,4,.46,.36,array[0,2],1260,60);
+ perform public.publish_contract_once('00000000-0000-0000-0000-00000000a102','Publication fiable','Sans doublon',200,2,4,.46,.36,array[5,6],1260,60);
+ perform public.publish_contract_once('00000000-0000-0000-0000-00000000a102','Publication fiable','Sans doublon',200,2,4,.46,.36,array[5,6],1260,60);
+ if (select count(*) from public.contracts where id='00000000-0000-0000-0000-00000000a102')<>1
+    or (select count(*) from public.slots where contract_id='00000000-0000-0000-0000-00000000a102')<>2
+    then raise exception 'Publication répétée'; end if;
  select id into monday from public.slots where contract_id=ct and weekday=0;
  select id into wednesday from public.slots where contract_id=ct and weekday=2;
  perform set_config('request.jwt.claim.sub',b::text,true);
  perform public.set_pseudo('Essai B');
  ch:=public.save_character(null,'Éclaireur essai','Elfe','Archer','Vie sauvage','','','','');
+ perform public.update_character_part(ch,'inventory','Sac ×1');
+ perform public.update_character_part(ch,'campaign_notes','Note personnelle');
+ if not exists(select 1 from public.characters where id=ch and inventory='Sac ×1' and campaign_notes='Note personnelle' and name='Éclaireur essai')
+    then raise exception 'Mise à jour partielle incorrecte'; end if;
  perform public.join_and_vote(ct,ch,array[monday]);
  perform public.join_and_vote(ct,ch,array[monday]);
  if (select count(*) from public.votes where character_id=ch)<>1 then raise exception 'Vote en double'; end if;

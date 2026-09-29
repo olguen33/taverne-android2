@@ -56,12 +56,19 @@ final class SupabaseGateway {
     }
     JSONArray names()throws Exception{return new JSONArray(request("POST","/rest/v1/rpc/shared_character_names",new JSONObject(),true));}
     JSONObject rpc(String name,JSONObject args)throws Exception{
-        if(!name.matches("publish_contract|edit_contract|save_character|set_pseudo|set_character_gold|edit_rumour"))throw new IllegalArgumentException("Opération inconnue");
+        if(!name.matches("publish_contract|publish_contract_once|edit_contract|save_character|update_character_part|set_pseudo|set_character_gold|edit_rumour"))throw new IllegalArgumentException("Opération inconnue");
         return objectRequest("POST","/rest/v1/rpc/"+name,args,true);
     }
     void insertRumour(JSONObject entry)throws Exception{request("POST","/rest/v1/rumours",entry,true);}
+    void insertRumourOnce(JSONObject entry)throws Exception{try{insertRumour(entry);}catch(IllegalStateException error){
+        if(!error.getMessage().contains("(409)")||list("rumours","select=id&id=eq."+entry.getString("id")).length()!=1)throw error;
+    }}
     void insertCampaignEntry(JSONObject entry)throws Exception{request("POST","/rest/v1/campaign_entries",entry,true);}
     void insertMessage(JSONObject entry)throws Exception{request("POST","/rest/v1/messages",entry,true);}
+    void updateCharacterField(String id,String field,String value)throws Exception{
+        if(!field.matches("inventory|campaign_notes"))throw new IllegalArgumentException("Champ inconnu");
+        rpc("update_character_part",new JSONObject().put("p_id",id).put("p_field",field).put("p_value",value));
+    }
     void remove(String table,String id)throws Exception{
         if(!table.matches("characters|contracts|rumours|campaign_entries"))throw new IllegalArgumentException("Table inconnue");
         request("DELETE","/rest/v1/"+table+"?id=eq."+id,null,true);

@@ -54,18 +54,7 @@ import java.util.Map;
 public final class MainActivity extends Activity {
     private static final String[] WEEKDAYS={"Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"};
     private static final String[] ARCHETYPES={"Guerrier","Mage","Archer","Roublard","Barbare","Enquêteur","Explorateur","Paladin","Assassin","Chasseur"};
-    private static final String[] ARCHETYPE_DESCRIPTIONS={
-        "Combattant entraîné qui protège ses alliés et tient la ligne.",
-        "Manie les arts magiques pour comprendre et façonner le monde.",
-        "Maîtrise les armes à distance et repère ses cibles.",
-        "Préfère l’adresse, la discrétion et la ruse à l’affrontement direct.",
-        "Se bat avec fougue et puise sa force dans son instinct.",
-        "Observe les indices et démêle les secrets.",
-        "Parcourt les terres inconnues et trace de nouveaux chemins.",
-        "Défend ses convictions et protège les autres.",
-        "Agit dans l’ombre, avec précision et patience.",
-        "Suit les pistes et connaît les créatures des terres sauvages."
-    };
+    private static final String[] ARCHETYPE_DESCRIPTIONS=TavernUi.ARCHETYPE_DESCRIPTIONS;
     private static final String[] RACES={"Humain","Orc","Nain","Elfe"};
     private static final String[] RACE_CHOICES={"Humain · Intelligence +10","Orc · Force +10","Nain · Endurance +10","Elfe · Agilité +10"};
     private static final String[] ORIGINS={"Citadin","Reclu","Vie sauvage"};
@@ -132,15 +121,15 @@ public final class MainActivity extends Activity {
     }
     @Override public void onBackPressed(){if(section.equals("personnages")&&openArchetype>=0){openArchetype=-1;show();}else if(section.equals("campagne")&&campaignCharacter>=0){campaignCharacter=-1;expandedCampaignPanel=-1;show();}else if(openCharacter>=0||openContract>=0){openCharacter=-1;openContract=-1;show();}else if(section.equals("mj")&&mjPage>=0){mjPage=-1;editingContractId=-1;show();}else if(accountId>=0&&!section.equals("accueil")){enterSection("accueil");}else super.onBackPressed();}
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){super.onActivityResult(requestCode,resultCode,data);if(requestCode==PICK_SHEET&&resultCode==RESULT_OK&&data!=null&&data.getData()!=null&&openCharacter>=0&&accountId>=0){Uri uri=data.getData();getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);db.setFileUri(accountId,openCharacter,uri.toString());show();}else if(requestCode==PICK_MAP&&resultCode==RESULT_OK&&data!=null&&data.getData()!=null&&accountId>=0){Uri uri=data.getData();try{getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);String name=uri.getLastPathSegment();try(android.database.Cursor cursor=getContentResolver().query(uri,new String[]{android.provider.OpenableColumns.DISPLAY_NAME},null,null,null)){if(cursor!=null&&cursor.moveToFirst())name=cursor.getString(0);}db.addDungeonMap(accountId,name==null?"Carte":name,uri.toString());mjPage=5;show();}catch(Exception e){info("Impossible d’ajouter cette carte.");}}}
-    private int dp(int value){return Math.round(value*getResources().getDisplayMetrics().density);}
-    private GradientDrawable background(int color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
-    private TextView text(String value,int size,int color,boolean bold){TextView t=new TextView(this);t.setText(value);t.setTextSize(size);t.setTextColor(color);if(bold)t.setTypeface(Typeface.create("serif",Typeface.BOLD));return t;}
+    private int dp(int value){return TavernUi.dp(this,value);}
+    private GradientDrawable background(int color,int radius){return TavernUi.background(this,color,radius);}
+    private TextView text(String value,int size,int color,boolean bold){return TavernUi.text(this,value,size,color,bold);}
     private LinearLayout column(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.VERTICAL);return v;}
-    private void gap(LinearLayout parent,int height){View v=new View(this);parent.addView(v,new LinearLayout.LayoutParams(1,dp(height)));}
+    private void gap(LinearLayout parent,int height){TavernUi.gap(this,parent,height);}
     private void label(LinearLayout parent,String value){TextView t=text(value,16,INK,true);parent.addView(t);gap(parent,6);}
-    private EditText input(LinearLayout parent,String hint,String value,int minLines){EditText e=new EditText(this);e.setSingleLine(minLines<=1);e.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES | (minLines>1 ? InputType.TYPE_TEXT_FLAG_MULTI_LINE : 0));e.setHint(hint);e.setText(value);e.setTextColor(INK);e.setHintTextColor(0xff87918a);e.setTextSize(16);e.setPadding(dp(12),dp(10),dp(12),dp(10));e.setBackground(background(0xfffbfaf4,8));if(minLines>1){e.setMinLines(minLines);e.setGravity(Gravity.TOP);}parent.addView(e,new LinearLayout.LayoutParams(-1,-2));gap(parent,16);return e;}
-    private Button button(String value,Runnable action){Button b=new Button(this);b.setText(value);b.setTextSize(15);b.setTextColor(Color.WHITE);b.setAllCaps(false);b.setBackground(background(0xff275340,9));b.setOnClickListener(v->action.run());return b;}
-    private LinearLayout panel(){LinearLayout p=column();p.setPadding(dp(20),dp(20),dp(20),dp(20));p.setBackground(background(PAPER,14));LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-1,-2);params.bottomMargin=dp(16);body.addView(p,params);return p;}
+    private EditText input(LinearLayout parent,String hint,String value,int minLines){return TavernUi.input(this,parent,hint,value,minLines);}
+    private Button button(String value,Runnable action){return TavernUi.button(this,value,action);}
+    private LinearLayout panel(){return TavernUi.panel(this,body);}
     private void title(String value){TextView eyebrow=text("COMPAGNIE DES MERCENAIRES",12,GOLD,true);eyebrow.setLetterSpacing(.12f);body.addView(eyebrow);gap(body,9);TextView h=text(value,38,0xffe8e1d0,true);body.addView(h);gap(body,24);}
     private void info(String message){Toast.makeText(this,message,Toast.LENGTH_SHORT).show();}
     private void enterSection(String target){if(useOnline()){openShared(target.equals("mj")?"Contrats":Character.toUpperCase(target.charAt(0))+target.substring(1));return;}section=target;show();}
@@ -190,7 +179,7 @@ public final class MainActivity extends Activity {
             PopupWindow menu=new PopupWindow(entries,dp(52),dp(162),true);menu.setBackgroundDrawable(background(0xb0324a3c,18));menu.setElevation(dp(6));menu.setOutsideTouchable(true);
             TextView update=text("↻",27,GOLD,false);update.setGravity(Gravity.CENTER);update.setContentDescription("Vérifier les mises à jour");entries.addView(update,new LinearLayout.LayoutParams(dp(52),dp(54)));update.setOnClickListener(click->{menu.dismiss();updates.check(true);});
             TextView music=text(musicEnabled()?"♫":"♪",27,GOLD,false);music.setGravity(Gravity.CENTER);music.setContentDescription(musicEnabled()?"Désactiver la musique":"Activer la musique");entries.addView(music,new LinearLayout.LayoutParams(dp(52),dp(54)));music.setOnClickListener(click->{getSharedPreferences(AUDIO_PREFS,MODE_PRIVATE).edit().putBoolean(MUSIC_ENABLED,!musicEnabled()).apply();syncTavernAudio();menu.dismiss();});
-            TextView logout=text(useOnline()?"☻":"✕",27,0xffffb8a9,false);logout.setGravity(Gravity.CENTER);logout.setContentDescription(useOnline()?"Compte en ligne et déconnexion":"Quitter");entries.addView(logout,new LinearLayout.LayoutParams(dp(52),dp(54)));logout.setOnClickListener(click->{menu.dismiss();if(useOnline()){openShared("Accueil");return;}getSharedPreferences(SESSION_PREFS,MODE_PRIVATE).edit().remove(REMEMBERED_ACCOUNT).apply();accountId=-1;openCharacter=-1;openContract=-1;section="accueil";show();});
+            TextView logout=text(useOnline()?"☻":"✕",27,0xffffb8a9,false);logout.setGravity(Gravity.CENTER);logout.setContentDescription(useOnline()?"Compte en ligne et déconnexion":"Quitter");entries.addView(logout,new LinearLayout.LayoutParams(dp(52),dp(54)));logout.setOnClickListener(click->{menu.dismiss();if(useOnline()){openShared("Compte");return;}getSharedPreferences(SESSION_PREFS,MODE_PRIVATE).edit().remove(REMEMBERED_ACCOUNT).apply();accountId=-1;openCharacter=-1;openContract=-1;section="accueil";show();});
             menu.showAsDropDown(gear,0,dp(4));
         });return gear;
     }
@@ -455,27 +444,8 @@ public final class MainActivity extends Activity {
         gap(portrait,14);portrait.addView(text(ARCHETYPE_DESCRIPTIONS[index],17,INK,false));
         LinearLayout rules=panel();showProfile(rules,ArchetypeRules.ALL[index],"","");
     }
-    private void profileRow(LinearLayout parent,String label,String value){
-        LinearLayout row=new LinearLayout(this);row.setPadding(dp(9),dp(8),dp(9),dp(8));
-        row.setBackground(background(0xffe2d5b9,4));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.bottomMargin=dp(3);parent.addView(row,lp);
-        row.addView(text(label,15,INK,true),new LinearLayout.LayoutParams(0,-2,2));
-        TextView content=text(value,16,INK,false);content.setGravity(Gravity.END);row.addView(content,new LinearLayout.LayoutParams(0,-2,1));
-    }
     private void showProfile(LinearLayout parent,ArchetypeRules.Profile profile,String race,String origin){
-        if(profile==null){parent.addView(text("Aucune fiche d’archétype pour ce personnage.",16,INK,false));return;}
-        boolean character=!race.isEmpty()&&!origin.isEmpty();
-        parent.addView(text(character?"Caractéristiques du personnage":"Caractéristiques de base",20,INK,true));gap(parent,9);
-        int[] values=character?ArchetypeRules.finalStats(profile,race,origin):profile.stats;
-        for(int i=0;i<values.length;i++){
-            String name=ArchetypeRules.ABBREVIATIONS[i]+" · "+ArchetypeRules.LABELS[i];
-            profileRow(parent,name,Integer.toString(values[i]));
-        }
-        if(character){gap(parent,8);parent.addView(text("Race : "+race+" · Origine : "+origin,14,0xff75572f,false));}
-        gap(parent,15);parent.addView(text("Combat",20,INK,true));gap(parent,8);
-        profileRow(parent,"Points de vie",Integer.toString(profile.pv));profileRow(parent,"Armure",Integer.toString(profile.armor));
-        profileRow(parent,"Dégâts",profile.damage);profileRow(parent,"Pénétration",profile.penetration>0?Integer.toString(profile.penetration):"—");
-        gap(parent,15);parent.addView(text("Compétences et capacités",20,INK,true));gap(parent,8);
-        for(String ability:profile.abilities){TextView item=text("• "+ability,16,INK,false);item.setPadding(dp(5),dp(5),dp(5),dp(5));parent.addView(item);}
+        TavernUi.profile(this,parent,profile,race,origin);
     }
     private Spinner characterChoice(LinearLayout parent,String title,String[] choices,String current){
         return characterChoice(parent,title,choices,choices,current);
