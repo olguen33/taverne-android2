@@ -193,6 +193,8 @@ public final class MainActivity extends Activity {
         FrameLayout frame=new FrameLayout(this);root.addView(frame,new LinearLayout.LayoutParams(-1,0,1));
         frame.addView(new TavernHomeView(),new FrameLayout.LayoutParams(-1,-1));
         TextView gear=gearMenu();FrameLayout.LayoutParams corner=new FrameLayout.LayoutParams(dp(52),dp(52),Gravity.TOP|Gravity.RIGHT);corner.setMargins(0,dp(12),dp(12),0);frame.addView(gear,corner);
+        Button online=button("Compagnie en ligne",()->startActivity(new Intent(this,SharedActivity.class)));
+        FrameLayout.LayoutParams onlinePosition=new FrameLayout.LayoutParams(dp(190),dp(50),Gravity.TOP|Gravity.LEFT);onlinePosition.setMargins(dp(12),dp(12),0,0);frame.addView(online,onlinePosition);
         View campaign=new CampaignScroll();campaign.setElevation(dp(5));
         campaign.setContentDescription("Ouvrir la campagne");
         FrameLayout.LayoutParams link=new FrameLayout.LayoutParams(dp(190),dp(64),Gravity.BOTTOM|Gravity.RIGHT);
@@ -364,6 +366,7 @@ public final class MainActivity extends Activity {
                 final long result=id;final String failure=error;runOnUiThread(()->{submit.setEnabled(true);if(failure!=null){info(failure);return;}if(result<0){info(registration?"Ce pseudo est déjà utilisé.":"Pseudo ou mot de passe incorrect.");return;}accountId=result;if(remember.isChecked())getSharedPreferences(SESSION_PREFS,MODE_PRIVATE).edit().putLong(REMEMBERED_ACCOUNT,result).apply();else getSharedPreferences(SESSION_PREFS,MODE_PRIVATE).edit().remove(REMEMBERED_ACCOUNT).apply();creatingAccount=false;show();});}).start();
         });p.addView(submit);gap(p,14);
         Button switchMode=button(creatingAccount?"J'ai déjà un compte":"Créer un compte",()->{creatingAccount=!creatingAccount;show();});p.addView(switchMode);
+        gap(body,14);body.addView(button("Ouvrir la compagnie en ligne",()->startActivity(new Intent(this,SharedActivity.class))));
         gap(body,14);body.addView(button("Vérifier les mises à jour",()->updates.check(true)));gap(body,14);body.addView(text("Compte conservé sur ce téléphone. Garde ton mot de passe : sans adresse e-mail, il n'y a pas de récupération automatique.",14,0xffc9c8b7,false));
     }
     private void showMap(){

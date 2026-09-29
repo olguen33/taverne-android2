@@ -19,6 +19,8 @@ final class SupabaseGateway {
         if(publishableKey.isEmpty())throw new IllegalArgumentException("Clé publique manquante");
         this.projectUrl=projectUrl.replaceAll("/$","");this.publishableKey=publishableKey;
     }
+    void useToken(String token){accessToken=token;}
+    JSONObject currentUser()throws Exception{return new JSONObject(request("GET","/auth/v1/user",null,true));}
     JSONObject signUp(String email,String password)throws Exception{
         JSONObject request=new JSONObject().put("email",email).put("password",password);
         return objectRequest("POST","/auth/v1/signup",request,false);
@@ -49,8 +51,19 @@ final class SupabaseGateway {
         return objectRequest("POST","/rest/v1/rpc/complete_contract",new JSONObject().put("p_contract",contractId),true);
     }
     JSONArray list(String table,String query)throws Exception{
-        if(!table.matches("profiles|characters|contracts|slots|participants|votes|messages|catalog"))throw new IllegalArgumentException("Table inconnue");
+        if(!table.matches("profiles|characters|contracts|slots|participants|votes|messages|catalog|rumours"))throw new IllegalArgumentException("Table inconnue");
         return new JSONArray(request("GET","/rest/v1/"+table+"?"+query,null,true));
+    }
+    JSONArray names()throws Exception{return new JSONArray(request("POST","/rest/v1/rpc/shared_character_names",new JSONObject(),true));}
+    JSONObject rpc(String name,JSONObject args)throws Exception{
+        if(!name.matches("publish_contract|edit_contract|save_character|set_pseudo|set_character_gold"))throw new IllegalArgumentException("Opération inconnue");
+        return objectRequest("POST","/rest/v1/rpc/"+name,args,true);
+    }
+    void insertRumour(JSONObject entry)throws Exception{request("POST","/rest/v1/rumours",entry,true);}
+    void insertMessage(JSONObject entry)throws Exception{request("POST","/rest/v1/messages",entry,true);}
+    void remove(String table,String id)throws Exception{
+        if(!table.matches("characters|contracts|rumours"))throw new IllegalArgumentException("Table inconnue");
+        request("DELETE","/rest/v1/"+table+"?id=eq."+id,null,true);
     }
     private JSONObject objectRequest(String method,String path,JSONObject body,boolean authenticated)throws Exception{
         String result=request(method,path,body,authenticated);
