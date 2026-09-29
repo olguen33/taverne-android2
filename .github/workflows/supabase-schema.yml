@@ -34,5 +34,6 @@ jobs:
       - run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/0004_manual_gold.sql
       - run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/0005_query_indexes.sql
       - run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/0006_rumour_edit.sql
+      - run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/0007_limit_character_names.sql
       - run: psql -v ON_ERROR_STOP=1 -f supabase/tests/shared_game.sql
       - run: psql -v ON_ERROR_STOP=1 -f supabase/tests/online_game.sql

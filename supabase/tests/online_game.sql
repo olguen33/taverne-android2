@@ -4,6 +4,9 @@ select public.set_pseudo('maitre_jeu');
 select public.save_character(null,'Éclaireur','Elfe','Archer','Vie sauvage','','','','');
 select public.set_character_gold((select id from public.characters where name='Éclaireur'),300);
 select public.publish_contract('Deuxième quête','Une aventure à deux',401,2,4,.46,.36,array[0,2],1200,1380);
+select public.join_and_vote((select id from public.contracts where title='Deuxième quête'),
+  (select id from public.characters where name='Éclaireur'),
+  array[(select s.id from public.slots s join public.contracts c on c.id=s.contract_id where c.title='Deuxième quête' order by s.weekday limit 1)]);
 do $$ begin
   if (select count(*) from public.slots s join public.contracts c on c.id=s.contract_id where c.title='Deuxième quête')<>2 then raise exception 'Créneaux absents'; end if;
 end $$;
