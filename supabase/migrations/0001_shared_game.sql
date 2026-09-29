@@ -101,10 +101,10 @@ grant select on public.profiles, public.contracts, public.slots, public.particip
 grant select, insert, delete on public.characters to authenticated;
 grant update (pseudo) on public.profiles to authenticated;
 grant update (name,race,archetype,origin,sheet,lore,inventory,campaign_notes) on public.characters to authenticated;
-grant insert (proposer_id,title,description,reward_text,reward_gold,danger,places,map_x,map_y) on public.contracts to authenticated;
+grant insert (id,proposer_id,title,description,reward_text,reward_gold,danger,places,map_x,map_y) on public.contracts to authenticated;
 grant update (title,description,reward_text,reward_gold,danger,places,map_x,map_y) on public.contracts to authenticated;
 grant delete on public.contracts to authenticated;
-grant insert (contract_id,weekday,start_minute,end_minute), delete on public.slots to authenticated;
+grant insert (id,contract_id,weekday,start_minute,end_minute), delete on public.slots to authenticated;
 grant insert (contract_id,character_id,body) on public.messages to authenticated;
 grant usage on sequence public.messages_id_seq to authenticated;
 
