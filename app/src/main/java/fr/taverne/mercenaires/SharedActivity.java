@@ -182,20 +182,24 @@ public final class SharedActivity extends Activity {
             .put("p_origin",origin).put("p_sheet",sheet).put("p_lore",lore).put("p_inventory",inventory).put("p_notes",notes);
     }
     private void characterDetail(){JSONObject c=find(characters,selectedCharacter);if(c==null){selectedCharacter=null;characterList();return;}
-        body.addView(txt(c.optString("name"),30,gold));LinearLayout stats=card();ArchetypeRules.Profile profile=ArchetypeRules.forName(c.optString("archetype"));
+        body.addView(txt(c.optString("name"),30,gold));button(body,"Retour aux personnages",()->{selectedCharacter=null;render();});
+        LinearLayout stats=card();ArchetypeRules.Profile profile=ArchetypeRules.forName(c.optString("archetype"));
         if(profile!=null){int[] values=ArchetypeRules.finalStats(profile,c.optString("race"),c.optString("origin"));StringBuilder s=new StringBuilder();for(int i=0;i<values.length;i++)s.append(ArchetypeRules.LABELS[i]).append(" : ").append(values[i]).append("\n");
             s.append("PV : ").append(profile.pv).append(" · Armure : ").append(profile.armor).append("\nDégâts : ").append(profile.damage).append(" · Pénétration : ").append(profile.penetration);
             stats.addView(txt(s.toString(),16,ink));for(String ability:profile.abilities)stats.addView(txt("• "+ability,15,ink));}
-        LinearLayout p=card();EditText n=field(p,"Nom",c.optString("name"),1);
+        LinearLayout p=card();p.addView(txt("Fiche du personnage",23,ink));EditText n=field(p,"Nom",c.optString("name"),1);
         String[] types=new String[ArchetypeRules.ALL.length];for(int i=0;i<types.length;i++)types[i]=ArchetypeRules.ALL[i].name;
         Spinner a=spinner(p,"Archétype",types,c.optString("archetype")),r=spinner(p,"Race",RACES,c.optString("race")),o=spinner(p,"Origine",ORIGINS,c.optString("origin"));
-        EditText sheet=field(p,"Fiche et notes",c.optString("sheet"),5),lore=field(p,"Histoire",c.optString("lore"),5),inventory=field(p,"Inventaire partagé avec la campagne",c.optString("inventory"),5),notes=field(p,"Notes de campagne",c.optString("campaign_notes"),4);
-        TextView balance=txt("Bourse : "+c.optLong("gold")+" pièces d’or",17,ink);p.addView(balance);
-        button(p,"Enregistrer la fiche",()->{if(n.getText().toString().trim().isEmpty()){notice("Indique un nom.");return;}
+        EditText sheet=field(p,"Fiche et notes",c.optString("sheet"),5);
+        LinearLayout belongings=card();belongings.addView(txt("Inventaire",23,ink));EditText inventory=field(belongings,"Objets et équipement",c.optString("inventory"),5);
+        LinearLayout purse=card();purse.addView(txt("Bourse",23,ink));purse.addView(txt(c.optLong("gold")+" pièces d’or",17,ink));
+        button(purse,"Renseigner la bourse",()->{EditText amount=new EditText(this);amount.setInputType(InputType.TYPE_CLASS_NUMBER);amount.setText(Long.toString(c.optLong("gold")));new AlertDialog.Builder(this).setTitle("Pièces d’or").setView(amount).setNegativeButton("Annuler",null).setPositiveButton("Enregistrer",(d,w)->{try{long gold=Long.parseLong(amount.getText().toString());submit(()->api.rpc("set_character_gold",new JSONObject().put("p_id",c.optString("id")).put("p_gold",gold)));}catch(NumberFormatException e){notice("Nombre invalide.");}}).show();});
+        LinearLayout story=card();story.addView(txt("Son histoire",23,ink));EditText lore=field(story,"Histoire",c.optString("lore"),5);
+        LinearLayout campaignNotes=card();campaignNotes.addView(txt("Notes de campagne",23,ink));EditText notes=field(campaignNotes,"Notes",c.optString("campaign_notes"),4);
+        LinearLayout actions=card();button(actions,"Enregistrer le personnage",()->{if(n.getText().toString().trim().isEmpty()){notice("Indique un nom.");return;}
             submit(()->api.rpc("save_character",characterArgs(c.optString("id"),n.getText().toString(),r.getSelectedItem().toString(),a.getSelectedItem().toString(),o.getSelectedItem().toString(),sheet.getText().toString(),lore.getText().toString(),inventory.getText().toString(),notes.getText().toString())));
         });
-        button(p,"Renseigner la bourse",()->{EditText amount=new EditText(this);amount.setInputType(InputType.TYPE_CLASS_NUMBER);amount.setText(Long.toString(c.optLong("gold")));new AlertDialog.Builder(this).setTitle("Pièces d’or").setView(amount).setNegativeButton("Annuler",null).setPositiveButton("Enregistrer",(d,w)->{try{long gold=Long.parseLong(amount.getText().toString());submit(()->api.rpc("set_character_gold",new JSONObject().put("p_id",c.optString("id")).put("p_gold",gold)));}catch(NumberFormatException e){notice("Nombre invalide.");}}).show();});
-        button(p,"Supprimer ce personnage",()->new AlertDialog.Builder(this).setTitle("Supprimer ce personnage ?").setNegativeButton("Annuler",null).setPositiveButton("Supprimer",(d,w)->submit(()->{api.remove("characters",c.optString("id"));selectedCharacter=null;})).show());
+        button(actions,"Supprimer ce personnage",()->new AlertDialog.Builder(this).setTitle("Supprimer ce personnage ?").setNegativeButton("Annuler",null).setPositiveButton("Supprimer",(d,w)->submit(()->{api.remove("characters",c.optString("id"));selectedCharacter=null;})).show());
         LinearLayout attachment=card();attachment.addView(txt("Anciennes pièces jointes",18,ink));attachment.addView(txt("Les fichiers locaux restent accessibles dans l’ancienne interface sur ce téléphone. Leur transfert en ligne n’est pas encore disponible.",14,ink));
     }
     private void shop(){body.addView(txt("Boutique",30,gold));if(characters.length()==0){card().addView(txt("Crée un personnage avant d’acheter.",16,ink));return;}
