@@ -47,6 +47,7 @@ public final class SharedActivity extends Activity {
     private ScrollView scroll;
     private String page="Accueil",selectedCharacter,selectedContract,userId="",pseudo="",renderedKey;
     private boolean registering=false,busy=false;
+    private boolean completedContracts=false;
     private JSONArray characters=new JSONArray(),contracts=new JSONArray(),slots=new JSONArray(),participants=new JSONArray(),votes=new JSONArray(),messages=new JSONArray(),catalog=new JSONArray(),profiles=new JSONArray(),names=new JSONArray(),rumours=new JSONArray();
     private final Map<String,Integer> positions=new HashMap<>();
     private int paper=0xffeae2ce,forest=0xff14231f,ink=0xff25352e,gold=0xffd8b76d;
@@ -178,8 +179,8 @@ public final class SharedActivity extends Activity {
     private String slotText(JSONObject s){return DAYS[s.optInt("weekday")]+" · "+clock(s.optInt("start_minute"))+" – "+clock(s.optInt("end_minute"))+(s.optInt("end_minute")<s.optInt("start_minute")?" (lendemain)":"");}
     private String clock(int mins){return String.format(java.util.Locale.FRANCE,"%02d:%02d",mins/60,mins%60);}
     private int count(JSONArray a,String key,String value){int n=0;for(int i=0;i<a.length();i++)if(value.equals(a.optJSONObject(i).optString(key)))n++;return n;}
-    private void contractList(){body.addView(txt("Contrats",30,gold));LinearLayout actions=card();button(actions,"Proposer un contrat",()->contractForm(null));
-        boolean any=false;for(int i=0;i<contracts.length();i++){JSONObject c=contracts.optJSONObject(i);any=true;LinearLayout p=card();p.addView(txt(c.optString("title"),23,ink));
+    private void contractList(){body.addView(txt("Contrats",30,gold));LinearLayout actions=card();button(actions,"En cours",()->{completedContracts=false;render();});button(actions,"Contrats terminés",()->{completedContracts=true;render();});if(!completedContracts)button(actions,"Proposer un contrat",()->contractForm(null));
+        boolean any=false;for(int i=0;i<contracts.length();i++){JSONObject c=contracts.optJSONObject(i);if("terminé".equals(c.optString("status"))!=completedContracts)continue;any=true;LinearLayout p=card();p.addView(txt(c.optString("title"),23,ink));
             p.addView(txt(c.optString("status").toUpperCase()+" · "+player(c.optString("proposer_id"))+" · "+count(participants,"contract_id",c.optString("id"))+"/"+c.optInt("places")+" participants",14,ink));
             p.addView(txt(c.optString("description"),16,ink));button(p,"Voir le contrat",()->{selectedContract=c.optString("id");render();});}
         if(!any)card().addView(txt("Aucun contrat pour le moment.",16,ink));
