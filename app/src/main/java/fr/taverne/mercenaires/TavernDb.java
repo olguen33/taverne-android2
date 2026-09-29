@@ -13,6 +13,8 @@ import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 final class TavernDb extends SQLiteOpenHelper {
     private static final int HASH_ITERATIONS=600000;
@@ -189,6 +191,20 @@ final class TavernDb extends SQLiteOpenHelper {
     void addMessage(long contractId,long characterId,long ownerId,String body) {if(!owns(getReadableDatabase(),ownerId,characterId))return;ContentValues v=new ContentValues();v.put("contract_id",contractId);v.put("character_id",characterId);v.put("body",body);v.put("created_at",System.currentTimeMillis());getWritableDatabase().insertOrThrow("messages",null,v);}
     void addDate(long contractId,long characterId,long ownerId,String value) {if(!owns(getReadableDatabase(),ownerId,characterId))return;ContentValues v=new ContentValues();v.put("contract_id",contractId);v.put("character_id",characterId);v.put("proposed_at",value);getWritableDatabase().insertWithOnConflict("dates",null,v,SQLiteDatabase.CONFLICT_IGNORE);}
     List<Character> characters(long ownerId) {List<Character> out=new ArrayList<>();try(Cursor c=getReadableDatabase().rawQuery("SELECT id,name,origin,role,background,sheet,lore,file_uri,inventory,gold FROM characters WHERE owner_id=? ORDER BY id DESC",new String[]{Long.toString(ownerId)})){while(c.moveToNext())out.add(new Character(c.getLong(0),c.getString(1),c.getString(2),c.getString(3),c.getString(4),c.getString(5),c.getString(6),c.getString(7),c.getString(8),c.getLong(9)));}return out;}
+    JSONArray exportLocalCharacters(long ownerId){
+        JSONArray result=new JSONArray();
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT id,name,origin,role,background,sheet,lore,inventory,campaign_notes,gold FROM characters WHERE owner_id=? ORDER BY id",new String[]{Long.toString(ownerId)})){
+            while(c.moveToNext()){
+                JSONObject item=new JSONObject();
+                try{item.put("legacy_id",c.getLong(0));item.put("name",c.getString(1));item.put("race",c.getString(2));
+                    item.put("archetype",c.getString(3));item.put("origin",c.getString(4));item.put("sheet",c.getString(5));
+                    item.put("lore",c.getString(6));item.put("inventory",c.getString(7));item.put("campaign_notes",c.getString(8));item.put("gold",c.getLong(9));}
+                catch(org.json.JSONException e){throw new IllegalStateException("Export local impossible",e);}
+                result.put(item);
+            }
+        }
+        return result;
+    }
     List<Contract> contracts() {List<Contract> out=new ArrayList<>();try(Cursor c=getReadableDatabase().rawQuery("SELECT c.id,c.title,c.description,c.reward,c.danger,c.places,c.status,(SELECT COUNT(*) FROM participants p WHERE p.contract_id=c.id),COALESCE(a.pseudo, ''),COALESCE(c.proposer_id,-1),COALESCE(c.locked_slot_id,-1),COALESCE(c.locked_date,'') FROM contracts c LEFT JOIN accounts a ON a.id=c.proposer_id ORDER BY c.id DESC",null)){while(c.moveToNext())out.add(new Contract(c.getLong(0),c.getString(1),c.getString(2),c.getString(3),c.getInt(4),c.getInt(5),c.getString(6),c.getInt(7),c.getString(8),c.getLong(9),c.getLong(10),c.getString(11)));}return out;}
     List<String> slotVoters(long slotId) {return names("SELECT COALESCE(a.pseudo, c.name) || ' (' || c.name || ')' FROM slot_votes v JOIN characters c ON c.id=v.character_id LEFT JOIN accounts a ON a.id=c.owner_id WHERE v.slot_id=? ORDER BY a.pseudo COLLATE NOCASE, c.name COLLATE NOCASE",slotId);}
     List<String> participants(long id) {return names("SELECT c.name FROM participants p JOIN characters c ON c.id=p.character_id WHERE p.contract_id=? ORDER BY p.id",id);}
