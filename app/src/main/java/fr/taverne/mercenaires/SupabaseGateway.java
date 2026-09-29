@@ -56,7 +56,7 @@ final class SupabaseGateway {
     }
     JSONArray names()throws Exception{return new JSONArray(request("POST","/rest/v1/rpc/shared_character_names",new JSONObject(),true));}
     JSONObject rpc(String name,JSONObject args)throws Exception{
-        if(!name.matches("publish_contract|edit_contract|save_character|set_pseudo|set_character_gold"))throw new IllegalArgumentException("Opération inconnue");
+        if(!name.matches("publish_contract|edit_contract|save_character|set_pseudo|set_character_gold|edit_rumour"))throw new IllegalArgumentException("Opération inconnue");
         return objectRequest("POST","/rest/v1/rpc/"+name,args,true);
     }
     void insertRumour(JSONObject entry)throws Exception{request("POST","/rest/v1/rumours",entry,true);}

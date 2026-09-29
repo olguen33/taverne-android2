@@ -37,7 +37,7 @@ public final class SharedActivity extends Activity {
     private static final String URL="https://dgvvocfpxflmfqaaakoe.supabase.co";
     private static final String KEY="sb_publishable_BW_VQsD-ymcyjgUblfUkDw_bkadPgIu";
     private static final String PREF="online_session";
-    private static final String[] TABS={"Accueil","Personnages","Contrats","Boutique","Rumeurs","Carte","Archétypes"};
+    private static final String[] TABS={"Accueil","Personnages","Contrats","Boutique","Rumeurs","Carte","Archétypes","Dés"};
     private static final String[] RACES={"Humain","Orc","Nain","Elfe"};
     private static final String[] ORIGINS={"Citadin","Reclu","Vie sauvage"};
     private static final String[] DAYS={"Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"};
@@ -45,7 +45,7 @@ public final class SharedActivity extends Activity {
     private SharedPreferences prefs;
     private LinearLayout root,body;
     private ScrollView scroll;
-    private String page="Accueil",selectedCharacter,selectedContract,userId="",pseudo="";
+    private String page="Accueil",selectedCharacter,selectedContract,userId="",pseudo="",renderedKey;
     private boolean registering=false,busy=false;
     private JSONArray characters=new JSONArray(),contracts=new JSONArray(),slots=new JSONArray(),participants=new JSONArray(),votes=new JSONArray(),messages=new JSONArray(),catalog=new JSONArray(),profiles=new JSONArray(),names=new JSONArray(),rumours=new JSONArray();
     private final Map<String,Integer> positions=new HashMap<>();
@@ -67,7 +67,7 @@ public final class SharedActivity extends Activity {
             try{if(e.getMessage()!=null&&e.getMessage().contains("(401)")&&!prefs.getString("refresh","").isEmpty()){
                     saveSession(api.refresh(prefs.getString("refresh","")));work.run();
                 }else throw e;
-            }catch(Exception retry){error=retry instanceof java.net.UnknownHostException||retry instanceof java.net.SocketTimeoutException?"Connexion indisponible. Réessaie quand le réseau revient.":retry.getMessage()==null?"Erreur réseau":retry.getMessage();}
+            }catch(Exception retry){String detail=retry.getMessage();error=retry instanceof java.net.UnknownHostException||retry instanceof java.net.SocketTimeoutException?"Connexion indisponible. Réessaie quand le réseau revient.":detail!=null&&(detail.contains("over_email_send_rate_limit")||detail.contains("email rate limit"))?"Envoi d’e-mails temporairement limité. Réessaie plus tard.":detail==null?"Erreur réseau":detail;}
         }String failure=error;runOnUiThread(()->{busy=false;if(failure!=null){notice(failure.length()>180?failure.substring(0,180):failure);if(userId.isEmpty())render();}else success.run();});}).start();}
     private void saveSession(JSONObject result)throws Exception{
         String token=result.getString("access_token"),refresh=result.getString("refresh_token");api.useToken(token);
@@ -88,7 +88,8 @@ public final class SharedActivity extends Activity {
     private String owner(String id){JSONObject n=find(names,id);return n==null?"":n.optString("owner_id");}
     private String player(String id){JSONObject p=find(profiles,id);return p==null?"MJ":p.optString("pseudo","MJ");}
     private void render(){
-        if(scroll!=null)positions.put(page+":"+selectedCharacter+":"+selectedContract,scroll.getScrollY());scroll=null;
+        if(scroll!=null&&renderedKey!=null)positions.put(renderedKey,scroll.getScrollY());scroll=null;
+        renderedKey=page+":"+selectedCharacter+":"+selectedContract;
         root=col();root.setBackgroundColor(forest);setContentView(root);
         if(userId.isEmpty()){authScreen();return;}
         LinearLayout top=col();top.setPadding(dp(16),dp(12),dp(16),dp(8));root.addView(top);TextView title=txt("La Taverne · En ligne",24,gold);title.setTypeface(Typeface.SERIF,Typeface.BOLD);top.addView(title);top.addView(txt(pseudo+"  ·  données partagées",14,0xffeee5d0));
@@ -96,8 +97,8 @@ public final class SharedActivity extends Activity {
         scroll=new ScrollView(this);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));body=col();body.setPadding(dp(16),dp(16),dp(16),dp(30));scroll.addView(body);
         if(selectedCharacter!=null)characterDetail();else if(selectedContract!=null)contractDetail();else switch(page){
             case "Personnages":characterList();break;case "Contrats":contractList();break;case "Boutique":shop();break;
-            case "Rumeurs":rumourList();break;case "Carte":mapScreen();break;case "Archétypes":archetypes();break;default:home();}
-        Integer y=positions.get(page+":"+selectedCharacter+":"+selectedContract);if(y!=null)scroll.post(()->scroll.scrollTo(0,y));
+            case "Rumeurs":rumourList();break;case "Carte":mapScreen();break;case "Archétypes":archetypes();break;case "Dés":dice();break;default:home();}
+        Integer y=positions.get(renderedKey);if(y!=null)scroll.post(()->scroll.scrollTo(0,y));
         HorizontalScrollView navScroll=new HorizontalScrollView(this);navScroll.setHorizontalScrollBarEnabled(false);root.addView(navScroll,new LinearLayout.LayoutParams(-1,dp(75)));LinearLayout nav=new LinearLayout(this);navScroll.addView(nav);for(String tab:TABS){Button b=new Button(this);b.setAllCaps(false);b.setText(tab);b.setTextColor(tab.equals(page)?gold:Color.WHITE);nav.addView(b);b.setOnClickListener(v->{page=tab;selectedCharacter=null;selectedContract=null;render();});}
     }
     private void authScreen(){ScrollView s=new ScrollView(this);root.addView(s);body=col();body.setPadding(dp(22),dp(55),dp(22),dp(22));s.addView(body);body.addView(txt("La Taverne · Compagnie en ligne",30,gold));gap(body,16);
@@ -125,7 +126,13 @@ public final class SharedActivity extends Activity {
     private void previewImport(String old,JSONArray data){if(data.length()==0){notice("Aucun personnage à transférer.");return;}StringBuilder list=new StringBuilder();for(int i=0;i<data.length();i++)list.append("• ").append(data.optJSONObject(i).optString("name")).append("\n");
         new AlertDialog.Builder(this).setTitle("Importer "+data.length()+" personnage(s) ?")
             .setMessage(list+"\nLes fichiers joints, contrats, votes et cartes locaux ne sont pas transférés. Les données locales restent sur ce téléphone. L’import ne peut être effectué qu’une fois par compte en ligne.")
-            .setNegativeButton("Annuler",null).setPositiveButton("Importer",(d,w)->submit(()->api.importLocalCharacters(old,data))).show();}
+            .setNegativeButton("Annuler",null).setPositiveButton("Importer",(d,w)->task(()->{
+                api.importLocalCharacters(old,data);load();
+                for(int i=0;i<data.length();i++){long legacy=data.getJSONObject(i).getLong("legacy_id");boolean copied=false;
+                    for(int j=0;j<characters.length();j++)if(characters.getJSONObject(j).optLong("legacy_id",-1)==legacy){copied=true;break;}
+                    if(!copied)throw new IllegalStateException("Vérification incomplète : garde tes données locales et contacte le MJ.");
+                }
+            },()->{notice(data.length()+" personnage(s) transféré(s) et vérifié(s).");render();})).show();}
     private void characterList(){
         body.addView(txt("Mes personnages",30,gold));gap(body,12);
         LinearLayout p=card();p.addView(txt("Nouveau personnage",21,ink));EditText n=field(p,"Nom","",1);
@@ -227,8 +234,11 @@ public final class SharedActivity extends Activity {
             String value=description.getText().toString().trim();if(value.isEmpty()){notice("Écris une rumeur.");return;}
             submit(()->api.insertRumour(new JSONObject().put("id",UUID.randomUUID().toString()).put("owner_id",userId).put("description",value).put("map_x",point[0]).put("map_y",point[1])));
         });
-        for(int i=0;i<rumours.length();i++){JSONObject r=rumours.optJSONObject(i);LinearLayout p=card();p.addView(txt(r.optString("description"),17,ink));if(userId.equals(r.optString("owner_id")))button(p,"Supprimer",()->new AlertDialog.Builder(this).setTitle("Supprimer cette rumeur ?")
-            .setNegativeButton("Annuler",null).setPositiveButton("Supprimer",(d,w)->submit(()->api.remove("rumours",r.optString("id")))).show());}
+        for(int i=0;i<rumours.length();i++){JSONObject r=rumours.optJSONObject(i);LinearLayout p=card();p.addView(txt(r.optString("description"),17,ink));if(userId.equals(r.optString("owner_id"))){
+            button(p,"Modifier",()->{LinearLayout form=col();form.setPadding(dp(16),dp(8),dp(16),dp(8));EditText text=field(form,"Rumeur",r.optString("description"),3);float[] location={(float)r.optDouble("map_x"),(float)r.optDouble("map_y")};button(form,"Déplacer sur la carte",()->chooseMap(location));
+                new AlertDialog.Builder(this).setTitle("Modifier la rumeur").setView(form).setNegativeButton("Annuler",null).setPositiveButton("Enregistrer",(d,w)->submit(()->api.rpc("edit_rumour",new JSONObject().put("p_id",r.optString("id")).put("p_description",text.getText().toString()).put("p_x",location[0]).put("p_y",location[1])))).show();});
+            button(p,"Supprimer",()->new AlertDialog.Builder(this).setTitle("Supprimer cette rumeur ?")
+                .setNegativeButton("Annuler",null).setPositiveButton("Supprimer",(d,w)->submit(()->api.remove("rumours",r.optString("id")))).show());}}
     }
     private void mapScreen(){body.addView(txt("Carte du monde",30,gold));List<MapView.Marker> markers=new ArrayList<>();Map<Long,String> details=new HashMap<>();long id=1;
         for(int i=0;i<contracts.length();i++){JSONObject c=contracts.optJSONObject(i);if(c.isNull("map_x")||c.isNull("map_y")||"terminé".equals(c.optString("status")))continue;markers.add(new MapView.Marker(id,false,(float)c.optDouble("map_x"),(float)c.optDouble("map_y")));details.put(id,c.optString("title"));id++;}
@@ -238,6 +248,12 @@ public final class SharedActivity extends Activity {
     private void archetypes(){body.addView(txt("Archétypes",30,gold));int[] pictures={R.drawable.archetype_guerrier,R.drawable.archetype_mage,R.drawable.archetype_archer,R.drawable.archetype_roublard,R.drawable.archetype_barbare,R.drawable.archetype_enqueteur,R.drawable.archetype_explorateur,R.drawable.archetype_paladin,R.drawable.archetype_assassin,R.drawable.archetype_chasseur};
         for(int i=0;i<ArchetypeRules.ALL.length;i++){ArchetypeRules.Profile profile=ArchetypeRules.ALL[i];LinearLayout p=card();p.addView(txt(profile.name,23,ink));ImageView picture=new ImageView(this);picture.setImageResource(pictures[i]);picture.setScaleType(ImageView.ScaleType.FIT_CENTER);p.addView(picture,new LinearLayout.LayoutParams(-1,dp(210)));
             StringBuilder stats=new StringBuilder();for(int j=0;j<profile.stats.length;j++)stats.append(ArchetypeRules.ABBREVIATIONS[j]).append(" ").append(profile.stats[j]).append("   ");p.addView(txt(stats.toString(),15,ink));p.addView(txt("PV "+profile.pv+" · Armure "+profile.armor+" · Dégâts "+profile.damage+" · Pénétration "+profile.penetration,15,ink));for(String ability:profile.abilities)p.addView(txt("• "+ability,15,ink));}
+    }
+    private void dice(){body.addView(txt("Lancer les dés",30,gold));java.security.SecureRandom random=new java.security.SecureRandom();for(int sides:new int[]{4,6,8,10,12,20,100}){
+            LinearLayout p=card();p.addView(txt("D"+sides,23,ink));LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);p.addView(row);
+            final int[] count={1};TextView number=txt("1",23,ink);button(row,"‹",()->{count[0]=Math.max(1,count[0]-1);number.setText(Integer.toString(count[0]));});row.addView(number);
+            button(row,"›",()->{count[0]=Math.min(100,count[0]+1);number.setText(Integer.toString(count[0]));});TextView result=txt("",17,ink);p.addView(result);
+            button(p,"Lancer "+sides+" faces",()->{StringBuilder values=new StringBuilder();int sum=0;for(int i=0;i<count[0];i++){int die=random.nextInt(sides)+1;sum+=die;if(i>0)values.append(" + ");values.append(die);}result.setText(values+" = "+sum);});}
     }
     @Override public void onBackPressed(){if(selectedCharacter!=null){selectedCharacter=null;render();}else if(selectedContract!=null){selectedContract=null;render();}else if(!"Accueil".equals(page)){page="Accueil";render();}else super.onBackPressed();}
 }
