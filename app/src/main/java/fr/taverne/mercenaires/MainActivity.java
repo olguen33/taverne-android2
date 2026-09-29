@@ -105,7 +105,7 @@ public final class MainActivity extends Activity {
     private static final String MUSIC_ENABLED="music_enabled";
     private static final String SESSION_PREFS="session";
     private static final String REMEMBERED_ACCOUNT="remembered_account_id";
-    @Override public void onCreate(Bundle state){super.onCreate(state);getWindow().setStatusBarColor(FOREST);getWindow().setNavigationBarColor(FOREST);db=new TavernDb(this);SharedPreferences prefs=getSharedPreferences(SESSION_PREFS,MODE_PRIVATE);long remembered=prefs.getLong(REMEMBERED_ACCOUNT,-1);if(remembered>=0){if(!db.accountName(remembered).isEmpty())accountId=remembered;else prefs.edit().remove(REMEMBERED_ACCOUNT).apply();}updates=new UpdateManager(this);show();updates.check(false);}
+    @Override public void onCreate(Bundle state){super.onCreate(state);getWindow().setStatusBarColor(FOREST);getWindow().setNavigationBarColor(FOREST);db=new TavernDb(this);SharedPreferences prefs=getSharedPreferences(SESSION_PREFS,MODE_PRIVATE);long remembered=prefs.getLong(REMEMBERED_ACCOUNT,-1);if(remembered>=0){if(!db.accountName(remembered).isEmpty())accountId=remembered;else prefs.edit().remove(REMEMBERED_ACCOUNT).apply();}updates=new UpdateManager(this);show();updates.check(false);if(state==null)startActivity(new Intent(this,SharedActivity.class));}
     @Override protected void onResume(){super.onResume();if(root!=null)root.post(this::hideSystemBarsAfterAttach);if(updates!=null)updates.resume();syncTavernAudio();}
     @Override protected void onPause(){pauseTavernAudio();super.onPause();}
     @Override protected void onDestroy(){if(tavernAudio!=null){tavernAudio.release();tavernAudio=null;}super.onDestroy();}

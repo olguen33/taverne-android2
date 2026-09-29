@@ -6,12 +6,17 @@ La clé publique et l’URL sont à renseigner dans la configuration Android au 
 
 `migrations/0001_shared_game.sql` crée le modèle partagé de La Taverne dans un **nouveau** projet Supabase : profils, personnages, contrats, créneaux, votes, messages et catalogue. Les règles RLS limitent les modifications de personnages à leur propriétaire. Les opérations qui touchent plusieurs lignes (achat, inscription et votes, verrouillage, paiement) sont des fonctions SQL atomiques.
 
-## Raccordement à effectuer
+## Mode partagé v0.38.0
 
-1. Créer un projet Supabase dans une région adaptée aux joueurs et appliquer la migration sur ce projet vide. Vérifier les fonctions et les politiques sur deux comptes de test avant toute donnée réelle.
-2. Activer la connexion e-mail et mot de passe. Copier **seulement** l’URL du projet et la clé **publishable** dans la configuration Android ; ne jamais placer une clé secrète ou `service_role` dans l’APK.
-3. Dans l’application, demander au joueur de se connecter à son ancien compte local, puis à son nouveau compte en ligne. Montrer l’aperçu des personnages à transférer avant d’appeler `import_local_characters`. La fonction n’accepte qu’un import par compte en ligne. Ne supprimer les données locales qu’après vérification et accord explicite.
-4. Les fichiers joints au personnage sont encore des URI du téléphone ; il faudra les transférer séparément dans un espace de stockage avec des droits par propriétaire. Les contrats et votes locaux anciens demandent une migration coordonnée : leurs identifiants de joueurs ne correspondent pas encore aux identifiants en ligne. Ne pas prétendre qu’ils ont été copiés tant que tous les participants n’ont pas lié leurs comptes.
-5. Remplacer progressivement les lectures et écritures SQLite de l’interface par les appels de `SupabaseGateway`, gérer les jetons de session et les erreurs hors ligne, puis tester deux téléphones simultanément.
+L’application ouvre désormais la compagnie en ligne par défaut. Les anciens comptes et leurs données restent dans l’interface locale accessible depuis l’écran en ligne. Un joueur crée un compte avec e-mail, mot de passe et pseudo, confirme son adresse si demandé, puis peut importer une fois les personnages de son ancien compte local. Les personnages, inventaires, contrats, créneaux, votes, messages, rumeurs, boutique et paiements de prime du mode en ligne lisent le projet Supabase. Le bouton d’actualisation recharge les changements d’un autre appareil ; revenir à l’application actualise aussi les données.
 
-Cette étape prépare les sources. Elle **n’active pas encore** le mode multijoueur dans l’APK actuel : il faut raccorder un projet Supabase et terminer l’interface et la migration de données.
+Les anciens contrats, votes, cartes de donjon et fichiers joints locaux ne sont pas transférés automatiquement. Les fichiers `content://` du téléphone doivent être conservés et téléversés séparément avant d’être accessibles depuis un autre appareil. Le mode local reste conservé pour cet historique. L’app ne supprime aucune donnée locale après import.
+
+## Vérifications avant diffusion
+
+1. Les migrations `0001` à `0004` sont appliquées au projet `dgvvocfpxflmfqaaakoe`. Vérifier les politiques avec deux comptes distincts et les tests de CI.
+2. La clé **publishable** figure dans l’APK, jamais une clé secrète ou `service_role`.
+3. Vérifier sur deux appareils la connexion, l’import, les votes, la date MJ, l’achat et le paiement unique. La session est restaurée avec un jeton renouvelable.
+4. Ne publier l’APK signé qu’après compilation et vérification de sa signature avec celle de la v0.37.1.
+
+La v0.37.1 déjà installée reste entièrement locale ; seul le nouvel APK propose le mode partagé.

@@ -19,6 +19,7 @@ import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.HorizontalScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -62,7 +63,12 @@ public final class SharedActivity extends Activity {
     private EditText field(LinearLayout p,String label,String value,int lines){TextView t=txt(label,15,ink);t.setTypeface(null,Typeface.BOLD);p.addView(t);EditText e=new EditText(this);e.setText(value);e.setHint(label);e.setTextColor(ink);e.setTextSize(16);e.setSingleLine(lines==1);if(lines>1){e.setMinLines(lines);e.setGravity(Gravity.TOP);e.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE);}p.addView(e);gap(p,8);return e;}
     private Spinner spinner(LinearLayout p,String label,String[] choices,String value){p.addView(txt(label,15,ink));Spinner s=new Spinner(this);ArrayAdapter<String> a=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,choices);a.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);s.setAdapter(a);p.addView(s);for(int i=0;i<choices.length;i++)if(choices[i].equals(value))s.setSelection(i);gap(p,8);return s;}
     private void notice(String s){Toast.makeText(this,s,Toast.LENGTH_LONG).show();}
-    private void task(Work work,Runnable success){if(busy)return;busy=true;new Thread(()->{String error=null;try{work.run();}catch(Exception e){error=e.getMessage()==null?"Erreur réseau":e.getMessage();}String failure=error;runOnUiThread(()->{busy=false;if(failure!=null){notice(failure.length()>180?failure.substring(0,180):failure);if(userId.isEmpty())render();}else success.run();});}).start();}
+    private void task(Work work,Runnable success){if(busy)return;busy=true;new Thread(()->{String error=null;try{work.run();}catch(Exception e){
+            try{if(e.getMessage()!=null&&e.getMessage().contains("(401)")&&!prefs.getString("refresh","").isEmpty()){
+                    saveSession(api.refresh(prefs.getString("refresh","")));work.run();
+                }else throw e;
+            }catch(Exception retry){error=retry instanceof java.net.UnknownHostException||retry instanceof java.net.SocketTimeoutException?"Connexion indisponible. Réessaie quand le réseau revient.":retry.getMessage()==null?"Erreur réseau":retry.getMessage();}
+        }String failure=error;runOnUiThread(()->{busy=false;if(failure!=null){notice(failure.length()>180?failure.substring(0,180):failure);if(userId.isEmpty())render();}else success.run();});}).start();}
     private void saveSession(JSONObject result)throws Exception{
         String token=result.getString("access_token"),refresh=result.getString("refresh_token");api.useToken(token);
         JSONObject user=result.getJSONObject("user");userId=user.getString("id");prefs.edit().putString("refresh",refresh).apply();
@@ -92,7 +98,7 @@ public final class SharedActivity extends Activity {
             case "Personnages":characterList();break;case "Contrats":contractList();break;case "Boutique":shop();break;
             case "Rumeurs":rumourList();break;case "Carte":mapScreen();break;case "Archétypes":archetypes();break;default:home();}
         Integer y=positions.get(page+":"+selectedCharacter+":"+selectedContract);if(y!=null)scroll.post(()->scroll.scrollTo(0,y));
-        ScrollView navScroll=new ScrollView(this);navScroll.setFillViewport(false);root.addView(navScroll,new LinearLayout.LayoutParams(-1,dp(75)));LinearLayout nav=new LinearLayout(this);navScroll.addView(nav);for(String tab:TABS){Button b=new Button(this);b.setAllCaps(false);b.setText(tab);b.setTextColor(tab.equals(page)?gold:Color.WHITE);nav.addView(b);b.setOnClickListener(v->{page=tab;selectedCharacter=null;selectedContract=null;render();});}
+        HorizontalScrollView navScroll=new HorizontalScrollView(this);navScroll.setHorizontalScrollBarEnabled(false);root.addView(navScroll,new LinearLayout.LayoutParams(-1,dp(75)));LinearLayout nav=new LinearLayout(this);navScroll.addView(nav);for(String tab:TABS){Button b=new Button(this);b.setAllCaps(false);b.setText(tab);b.setTextColor(tab.equals(page)?gold:Color.WHITE);nav.addView(b);b.setOnClickListener(v->{page=tab;selectedCharacter=null;selectedContract=null;render();});}
     }
     private void authScreen(){ScrollView s=new ScrollView(this);root.addView(s);body=col();body.setPadding(dp(22),dp(55),dp(22),dp(22));s.addView(body);body.addView(txt("La Taverne · Compagnie en ligne",30,gold));gap(body,16);
         LinearLayout p=card();p.addView(txt(registering?"Créer un compte en ligne":"Connexion en ligne",23,ink));gap(p,12);
@@ -214,8 +220,9 @@ public final class SharedActivity extends Activity {
                 }catch(Exception e){notice("Récompense, danger ou places invalides.");}
             }).show();
     }
-    private void chooseMap(float[] point){MapView map=new MapView(this,true,null);map.setChosen(point[0],point[1]);new AlertDialog.Builder(this).setTitle("Emplacement du contrat").setView(map)
-        .setNegativeButton("Annuler",null).setPositiveButton("Choisir",(d,w)->{if(map.chosenX()>=0){point[0]=map.chosenX();point[1]=map.chosenY();}}).show();map.getLayoutParams().height=dp(450);}
+    private void chooseMap(float[] point){MapView map=new MapView(this,true,null);map.setChosen(point[0],point[1]);LinearLayout holder=col();holder.addView(map,new LinearLayout.LayoutParams(-1,dp(450)));
+        new AlertDialog.Builder(this).setTitle("Emplacement du contrat").setView(holder)
+        .setNegativeButton("Annuler",null).setPositiveButton("Choisir",(d,w)->{if(map.chosenX()>=0){point[0]=map.chosenX();point[1]=map.chosenY();}}).show();}
     private void rumourList(){body.addView(txt("Rumeurs",30,gold));LinearLayout create=card();EditText description=field(create,"Nouvelle rumeur","",3);float[] point={.465f,.36f};button(create,"Choisir un lieu",()->chooseMap(point));button(create,"Publier",()->{
             String value=description.getText().toString().trim();if(value.isEmpty()){notice("Écris une rumeur.");return;}
             submit(()->api.insertRumour(new JSONObject().put("id",UUID.randomUUID().toString()).put("owner_id",userId).put("description",value).put("map_x",point[0]).put("map_y",point[1])));
