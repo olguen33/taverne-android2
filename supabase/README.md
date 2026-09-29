@@ -1,5 +1,9 @@
 # Synchronisation multijoueur
 
+Projet de développement créé le 29 septembre 2026 : `dgvvocfpxflmfqaaakoe` (`eu-west-3`).
+Migration `shared_game_initial` appliquée et migration `restrict_profile_trigger` appliquée.
+La clé publique et l’URL sont à renseigner dans la configuration Android au moment du raccordement ; aucune clé secrète ne doit être incluse.
+
 `migrations/0001_shared_game.sql` crée le modèle partagé de La Taverne dans un **nouveau** projet Supabase : profils, personnages, contrats, créneaux, votes, messages et catalogue. Les règles RLS limitent les modifications de personnages à leur propriétaire. Les opérations qui touchent plusieurs lignes (achat, inscription et votes, verrouillage, paiement) sont des fonctions SQL atomiques.
 
 ## Raccordement à effectuer

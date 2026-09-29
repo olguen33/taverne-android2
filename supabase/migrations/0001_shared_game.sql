@@ -16,6 +16,7 @@ begin
 end $$;
 create trigger profile_on_signup after insert on auth.users
 for each row execute function public.create_profile();
+revoke all on function public.create_profile() from public, anon, authenticated;
 
 create table public.characters (
   id uuid primary key default gen_random_uuid(),
