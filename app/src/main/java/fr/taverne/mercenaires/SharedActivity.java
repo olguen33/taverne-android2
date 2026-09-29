@@ -9,6 +9,8 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
@@ -37,7 +39,7 @@ public final class SharedActivity extends Activity {
     private static final String URL="https://dgvvocfpxflmfqaaakoe.supabase.co";
     private static final String KEY="sb_publishable_BW_VQsD-ymcyjgUblfUkDw_bkadPgIu";
     private static final String PREF="online_session";
-    private static final String[] TABS={"Accueil","Personnages","Contrats","Boutique","Rumeurs","Carte","Archétypes","Dés"};
+    private static final String[] TABS={"Accueil","Personnages","Contrats","Campagne","Boutique","Rumeurs","Carte","Archétypes","Dés"};
     private static final String[] RACES={"Humain","Orc","Nain","Elfe"};
     private static final String[] ORIGINS={"Citadin","Reclu","Vie sauvage"};
     private static final String[] DAYS={"Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"};
@@ -48,18 +50,24 @@ public final class SharedActivity extends Activity {
     private String page="Accueil",selectedCharacter,selectedContract,userId="",pseudo="",renderedKey;
     private boolean registering=false,busy=false;
     private boolean completedContracts=false;
-    private JSONArray characters=new JSONArray(),contracts=new JSONArray(),slots=new JSONArray(),participants=new JSONArray(),votes=new JSONArray(),messages=new JSONArray(),catalog=new JSONArray(),profiles=new JSONArray(),names=new JSONArray(),rumours=new JSONArray();
+    private final Handler refreshHandler=new Handler(Looper.getMainLooper());
+    private final Runnable periodicRefresh=new Runnable(){@Override public void run(){
+        if(!userId.isEmpty()&&!busy)refresh();
+        refreshHandler.postDelayed(this,15000);
+    }};
+    private JSONArray characters=new JSONArray(),contracts=new JSONArray(),slots=new JSONArray(),participants=new JSONArray(),votes=new JSONArray(),messages=new JSONArray(),catalog=new JSONArray(),profiles=new JSONArray(),names=new JSONArray(),rumours=new JSONArray(),campaignEntries=new JSONArray();
     private final Map<String,Integer> positions=new HashMap<>();
     private int paper=0xffeae2ce,forest=0xff14231f,ink=0xff25352e,gold=0xffd8b76d;
     interface Work { void run() throws Exception; }
-    @Override public void onCreate(Bundle state){super.onCreate(state);prefs=getSharedPreferences(PREF,MODE_PRIVATE);getWindow().setStatusBarColor(forest);getWindow().setNavigationBarColor(forest);render();String refresh=prefs.getString("refresh","");if(!refresh.isEmpty())task(()->{saveSession(api.refresh(refresh));load();},()->render());}
-    @Override protected void onResume(){super.onResume();if(!userId.isEmpty()&&!busy)refresh();}
+    @Override public void onCreate(Bundle state){super.onCreate(state);prefs=getSharedPreferences(PREF,MODE_PRIVATE);String requested=getIntent().getStringExtra("page");if(requested!=null&&java.util.Arrays.asList(TABS).contains(requested))page=requested;getWindow().setStatusBarColor(forest);getWindow().setNavigationBarColor(forest);render();String refresh=prefs.getString("refresh","");if(!refresh.isEmpty())task(()->{saveSession(api.refresh(refresh));load();},()->render());}
+    @Override protected void onResume(){super.onResume();if(!userId.isEmpty()&&!busy)refresh();refreshHandler.removeCallbacks(periodicRefresh);refreshHandler.postDelayed(periodicRefresh,15000);}
+    @Override protected void onPause(){refreshHandler.removeCallbacks(periodicRefresh);super.onPause();}
     private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
     private GradientDrawable bg(int color){GradientDrawable g=new GradientDrawable();g.setColor(color);g.setCornerRadius(dp(12));return g;}
     private TextView txt(String s,int size,int color){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(color);return t;}
     private LinearLayout col(){LinearLayout l=new LinearLayout(this);l.setOrientation(1);return l;}
     private void gap(LinearLayout l,int h){View v=new View(this);l.addView(v,new LinearLayout.LayoutParams(1,dp(h)));}
-    private LinearLayout card(){LinearLayout p=col();p.setPadding(dp(18),dp(18),dp(18),dp(18));p.setBackground(bg(paper));LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-1,-2);params.bottomMargin=dp(14);body.addView(p,params);return p;}
+    private LinearLayout card(){LinearLayout p=col();p.setPadding(dp(20),dp(20),dp(20),dp(20));p.setBackground(bg(paper));LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-1,-2);params.bottomMargin=dp(16);body.addView(p,params);return p;}
     private Button button(LinearLayout p,String s,Runnable run){Button b=new Button(this);b.setText(s);b.setAllCaps(false);b.setTextColor(Color.WHITE);b.setBackground(bg(0xff275340));p.addView(b);b.setOnClickListener(v->run.run());return b;}
     private EditText field(LinearLayout p,String label,String value,int lines){TextView t=txt(label,15,ink);t.setTypeface(null,Typeface.BOLD);p.addView(t);EditText e=new EditText(this);e.setText(value);e.setHint(label);e.setTextColor(ink);e.setTextSize(16);e.setSingleLine(lines==1);if(lines>1){e.setMinLines(lines);e.setGravity(Gravity.TOP);e.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE);}p.addView(e);gap(p,8);return e;}
     private Spinner spinner(LinearLayout p,String label,String[] choices,String value){p.addView(txt(label,15,ink));Spinner s=new Spinner(this);ArrayAdapter<String> a=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,choices);a.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);s.setAdapter(a);p.addView(s);for(int i=0;i<choices.length;i++)if(choices[i].equals(value))s.setSelection(i);gap(p,8);return s;}
@@ -69,7 +77,7 @@ public final class SharedActivity extends Activity {
                     saveSession(api.refresh(prefs.getString("refresh","")));work.run();
                 }else throw e;
             }catch(Exception retry){String detail=retry.getMessage();error=retry instanceof java.net.UnknownHostException||retry instanceof java.net.SocketTimeoutException?"Connexion indisponible. Réessaie quand le réseau revient.":detail!=null&&(detail.contains("over_email_send_rate_limit")||detail.contains("email rate limit"))?"Envoi d’e-mails temporairement limité. Réessaie plus tard.":detail==null?"Erreur réseau":detail;}
-        }String failure=error;runOnUiThread(()->{busy=false;if(failure!=null){notice(failure.length()>180?failure.substring(0,180):failure);if(userId.isEmpty()){prefs.edit().remove("refresh").apply();render();}}else success.run();});}).start();}
+        }String failure=error;runOnUiThread(()->{busy=false;if(failure!=null){notice(failure.length()>180?failure.substring(0,180):failure);if(userId.isEmpty()&&prefs.contains("refresh")&&(failure.contains("invalid_grant")||failure.contains("refresh_token_not_found"))){prefs.edit().remove("refresh").apply();render();}}else success.run();});}).start();}
     private void saveSession(JSONObject result)throws Exception{
         String token=result.getString("access_token"),refresh=result.getString("refresh_token");api.useToken(token);
         JSONObject user=result.getJSONObject("user");userId=user.getString("id");prefs.edit().putString("refresh",refresh).apply();
@@ -79,7 +87,7 @@ public final class SharedActivity extends Activity {
         characters=api.list("characters","select=*");contracts=api.list("contracts","select=*&order=id.desc");
         slots=api.list("slots","select=*");participants=api.list("participants","select=*");votes=api.list("votes","select=*");
         messages=api.list("messages","select=*&order=id.asc");catalog=api.list("catalog","select=*&active=eq.true");
-        rumours=api.list("rumours","select=*");names=api.names();
+        rumours=api.list("rumours","select=*");campaignEntries=api.list("campaign_entries","select=*&order=created_at.desc");names=api.names();
         pseudo=userId;for(int i=0;i<profiles.length();i++){JSONObject p=profiles.getJSONObject(i);if(userId.equals(p.optString("id")))pseudo=p.optString("pseudo",userId);}
     }
     private void refresh(){task(()->load(),this::render);}
@@ -93,14 +101,20 @@ public final class SharedActivity extends Activity {
         renderedKey=page+":"+selectedCharacter+":"+selectedContract;
         root=col();root.setBackgroundColor(forest);setContentView(root);
         if(userId.isEmpty()){authScreen();return;}
-        LinearLayout top=col();top.setPadding(dp(16),dp(12),dp(16),dp(8));root.addView(top);TextView title=txt("La Taverne · En ligne",24,gold);title.setTypeface(Typeface.SERIF,Typeface.BOLD);top.addView(title);top.addView(txt(pseudo+"  ·  données partagées",14,0xffeee5d0));
-        LinearLayout actions=new LinearLayout(this);top.addView(actions);button(actions,"↻ Actualiser",this::refresh);button(actions,"Déconnexion",()->{prefs.edit().remove("refresh").apply();api.signOut();userId="";render();});
+        LinearLayout top=new LinearLayout(this);top.setGravity(Gravity.CENTER_VERTICAL);top.setPadding(dp(12),dp(14),dp(18),dp(12));root.addView(top);
+        TextView back=txt("‹",32,gold);back.setGravity(Gravity.CENTER);back.setContentDescription("Retour à la Taverne");top.addView(back,new LinearLayout.LayoutParams(dp(48),dp(48)));back.setOnClickListener(v->finish());
+        TextView title=txt("La Taverne",24,0xffe8e1d0);title.setTypeface(Typeface.SERIF,Typeface.BOLD);top.addView(title,new LinearLayout.LayoutParams(0,-2,1));
+        TextView options=txt("⚙",27,0xffe8e1d0);options.setGravity(Gravity.CENTER);options.setContentDescription("Compte et actualisation");top.addView(options,new LinearLayout.LayoutParams(dp(52),dp(52)));
+        options.setOnClickListener(v->new AlertDialog.Builder(this).setTitle(pseudo)
+            .setItems(new String[]{"Actualiser","Déconnexion"},(dialog,which)->{if(which==0)refresh();else{prefs.edit().remove("refresh").apply();api.signOut();userId="";render();}}).show());
         scroll=new ScrollView(this);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));body=col();body.setPadding(dp(16),dp(16),dp(16),dp(30));scroll.addView(body);
         if(selectedCharacter!=null)characterDetail();else if(selectedContract!=null)contractDetail();else switch(page){
             case "Personnages":characterList();break;case "Contrats":contractList();break;case "Boutique":shop();break;
-            case "Rumeurs":rumourList();break;case "Carte":mapScreen();break;case "Archétypes":archetypes();break;case "Dés":dice();break;default:home();}
+            case "Rumeurs":rumourList();break;case "Campagne":campaignScreen();break;case "Carte":mapScreen();break;case "Archétypes":archetypes();break;case "Dés":dice();break;default:home();}
         Integer y=positions.get(renderedKey);if(y!=null)scroll.post(()->scroll.scrollTo(0,y));
-        HorizontalScrollView navScroll=new HorizontalScrollView(this);navScroll.setHorizontalScrollBarEnabled(false);root.addView(navScroll,new LinearLayout.LayoutParams(-1,dp(75)));LinearLayout nav=new LinearLayout(this);navScroll.addView(nav);for(String tab:TABS){Button b=new Button(this);b.setAllCaps(false);b.setText(tab);b.setTextColor(tab.equals(page)?gold:Color.WHITE);nav.addView(b);b.setOnClickListener(v->{page=tab;selectedCharacter=null;selectedContract=null;render();});}
+        HorizontalScrollView navScroll=new HorizontalScrollView(this);navScroll.setHorizontalScrollBarEnabled(false);navScroll.setFillViewport(true);navScroll.setBackgroundColor(0xff192a25);root.addView(navScroll,new LinearLayout.LayoutParams(-1,dp(68)));
+        LinearLayout nav=new LinearLayout(this);navScroll.addView(nav);for(String tab:new String[]{"Contrats","Carte","Rumeurs","Personnages","Campagne","Boutique","Archétypes","Dés"}){
+            TextView item=txt(tab,14,tab.equals(page)?gold:0xffb1bfb4);item.setGravity(Gravity.CENTER);item.setPadding(dp(12),0,dp(12),0);item.setMinWidth(dp(94));nav.addView(item,new LinearLayout.LayoutParams(-2,-1));item.setOnClickListener(v->{page=tab;selectedCharacter=null;selectedContract=null;render();});}
     }
     private void authScreen(){ScrollView s=new ScrollView(this);root.addView(s);body=col();body.setPadding(dp(22),dp(55),dp(22),dp(22));s.addView(body);body.addView(txt("La Taverne · Compagnie en ligne",30,gold));gap(body,16);
         LinearLayout p=card();p.addView(txt(registering?"Créer un compte en ligne":"Connexion en ligne",23,ink));gap(p,12);
@@ -110,14 +124,31 @@ public final class SharedActivity extends Activity {
         button(p,registering?"Créer mon compte":"Se connecter",()->{
             String mail=email.getText().toString().trim(),secret=password.getText().toString();if(!mail.contains("@")||secret.length()<8){notice("Adresse e-mail ou mot de passe invalide (8 caractères minimum).");return;}
             if(registering){String n=nickname.getText().toString().trim();if(n.length()<3||n.length()>32){notice("Pseudo de 3 à 32 caractères requis.");return;}prefs.edit().putString("pending_pseudo",n).apply();task(()->{JSONObject r=api.signUp(mail,secret);if(r.has("access_token")&&!r.isNull("access_token")){saveSession(r);try{api.rpc("set_pseudo",new JSONObject().put("p_pseudo",n));}catch(Exception ignored){}load();}},()->{notice(userId.isEmpty()?"Compte créé. Confirme l’e-mail reçu, puis connecte-toi.":"Compte créé.");registering=false;render();});}
-            else task(()->{saveSession(api.signIn(mail,secret));String pending=prefs.getString("pending_pseudo","");if(!pending.isEmpty()){try{api.rpc("set_pseudo",new JSONObject().put("p_pseudo",pending));}catch(Exception ignored){}prefs.edit().remove("pending_pseudo").apply();}load();},this::render);
+            else task(()->{saveSession(api.signIn(mail,secret));prefs.edit().putBoolean("legacy_mode",false).apply();String pending=prefs.getString("pending_pseudo","");if(!pending.isEmpty()){try{api.rpc("set_pseudo",new JSONObject().put("p_pseudo",pending));}catch(Exception ignored){}prefs.edit().remove("pending_pseudo").apply();}load();},this::finish);
         });button(p,registering?"J’ai déjà un compte":"Créer un compte",()->{registering=!registering;render();});
-        LinearLayout legacy=card();legacy.addView(txt("Ancien compte sur ce téléphone",19,ink));legacy.addView(txt("Tes données locales restent accessibles dans l’ancienne interface. Après connexion en ligne, tu pourras importer tes personnages.",15,ink));button(legacy,"Retour à l’application locale",this::finish);
+        LinearLayout legacy=card();legacy.addView(txt("Ancien compte sur ce téléphone",19,ink));legacy.addView(txt("Tes données locales restent accessibles dans l’ancienne interface. Après connexion en ligne, tu pourras importer tes personnages.",15,ink));button(legacy,"Retour à l’application locale",()->{prefs.edit().putBoolean("legacy_mode",true).apply();finish();});
     }
     private void home(){LinearLayout p=card();p.addView(txt("Bienvenue, "+pseudo,24,ink));gap(p,8);p.addView(txt("Cette compagnie utilise les mêmes contrats et personnages sur tous les appareils connectés. Actualise pour voir les changements des autres joueurs.",16,ink));
         button(p,"Changer mon pseudo",()->{EditText newName=new EditText(this);newName.setText(pseudo);new AlertDialog.Builder(this).setTitle("Pseudo visible").setView(newName).setNegativeButton("Annuler",null)
             .setPositiveButton("Enregistrer",(d,w)->submit(()->api.rpc("set_pseudo",new JSONObject().put("p_pseudo",newName.getText().toString().trim())))).show();});
-        button(p,"Importer mes personnages locaux",this::importDialog);button(p,"Ouvrir l’ancienne interface locale",this::finish);}
+        button(p,"Importer mes personnages locaux",this::importDialog);button(p,"Ouvrir l’ancienne interface locale",()->{prefs.edit().putBoolean("legacy_mode",true).apply();finish();});}
+    private void campaignScreen(){body.addView(txt("Campagne",38,0xffe8e1d0));gap(body,24);
+        LinearLayout compose=card();compose.addView(txt("Parchemin de la compagnie",23,ink));gap(compose,12);
+        EditText title=field(compose,"Titre","",1),content=field(compose,"Informations à partager avec tous les joueurs","",5);
+        button(compose,"Publier dans la campagne",()->{String t=title.getText().toString().trim(),b=content.getText().toString().trim();
+            if(t.isEmpty()||t.length()>120||b.isEmpty()||b.length()>8000){notice("Titre ou contenu invalide.");return;}
+            submit(()->api.insertCampaignEntry(new JSONObject().put("author_id",userId).put("title",t).put("body",b)));
+        });
+        if(campaignEntries.length()==0)card().addView(txt("Aucune information partagée pour le moment.",16,ink));
+        for(int i=0;i<campaignEntries.length();i++){JSONObject entry=campaignEntries.optJSONObject(i);if(entry==null)continue;
+            LinearLayout parchment=card();parchment.addView(txt(entry.optString("title"),24,ink));gap(parchment,10);
+            parchment.addView(txt(entry.optString("body"),17,ink));gap(parchment,12);
+            parchment.addView(txt("Publié par "+player(entry.optString("author_id")),14,0xff75572f));
+            if(userId.equals(entry.optString("author_id")))button(parchment,"Supprimer",()->new AlertDialog.Builder(this)
+                .setTitle("Supprimer cette information ?").setNegativeButton("Annuler",null)
+                .setPositiveButton("Supprimer",(d,w)->submit(()->api.remove("campaign_entries",entry.optString("id")))).show());
+        }
+    }
     private void importDialog(){LinearLayout p=col();p.setPadding(dp(16),dp(12),dp(16),0);EditText old=field(p,"Ancien pseudo local","",1),password=field(p,"Ancien mot de passe local","",1);password.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
         new AlertDialog.Builder(this).setTitle("Vérifier l’ancien compte").setView(p).setNegativeButton("Annuler",null).setPositiveButton("Continuer",(d,w)->{
             String n=old.getText().toString().trim();char[] secret=password.getText().toString().toCharArray();task(()->{
@@ -179,11 +210,17 @@ public final class SharedActivity extends Activity {
     private String slotText(JSONObject s){return DAYS[s.optInt("weekday")]+" · "+clock(s.optInt("start_minute"))+" – "+clock(s.optInt("end_minute"))+(s.optInt("end_minute")<s.optInt("start_minute")?" (lendemain)":"");}
     private String clock(int mins){return String.format(java.util.Locale.FRANCE,"%02d:%02d",mins/60,mins%60);}
     private int count(JSONArray a,String key,String value){int n=0;for(int i=0;i<a.length();i++)if(value.equals(a.optJSONObject(i).optString(key)))n++;return n;}
-    private void contractList(){body.addView(txt("Contrats",30,gold));LinearLayout actions=card();button(actions,"En cours",()->{completedContracts=false;render();});button(actions,"Contrats terminés",()->{completedContracts=true;render();});if(!completedContracts)button(actions,"Proposer un contrat",()->contractForm(null));
-        boolean any=false;for(int i=0;i<contracts.length();i++){JSONObject c=contracts.optJSONObject(i);if("terminé".equals(c.optString("status"))!=completedContracts)continue;any=true;LinearLayout p=card();p.addView(txt(c.optString("title"),23,ink));
-            p.addView(txt(c.optString("status").toUpperCase()+" · "+player(c.optString("proposer_id"))+" · "+count(participants,"contract_id",c.optString("id"))+"/"+c.optInt("places")+" participants",14,ink));
-            p.addView(txt(c.optString("description"),16,ink));button(p,"Voir le contrat",()->{selectedContract=c.optString("id");render();});}
-        if(!any)card().addView(txt("Aucun contrat pour le moment.",16,ink));
+    private void contractList(){body.addView(txt("Contrats",38,0xffe8e1d0));gap(body,24);
+        LinearLayout tabs=new LinearLayout(this);body.addView(tabs);gap(body,18);
+        Button active=button(tabs,"En cours",()->{completedContracts=false;render();});Button completed=button(tabs,"Contrats terminés",()->{completedContracts=true;render();});
+        active.setEnabled(completedContracts);completed.setEnabled(!completedContracts);
+        if(!completedContracts){LinearLayout publish=card();button(publish,"Proposer un contrat",()->contractForm(null));}
+        boolean any=false;for(int i=0;i<contracts.length();i++){JSONObject c=contracts.optJSONObject(i);if("terminé".equals(c.optString("status"))!=completedContracts)continue;any=true;LinearLayout p=card();
+            p.addView(txt(c.optString("status").toUpperCase(java.util.Locale.FRANCE),12,0xff75572f));gap(p,12);p.addView(txt(c.optString("title"),27,ink));gap(p,6);
+            p.addView(txt("Proposé par : "+player(c.optString("proposer_id")),14,0xff75572f));gap(p,10);p.addView(txt(c.optString("description"),16,0xff526056));gap(p,15);
+            p.addView(txt(count(participants,"contract_id",c.optString("id"))+" / "+c.optInt("places")+" mercenaires  ·  Danger "+c.optInt("danger")+"/5",14,ink));gap(p,12);
+            button(p,"Voir le contrat",()->{selectedContract=c.optString("id");render();});}
+        if(!any)card().addView(txt(completedContracts?"Aucun contrat terminé":"Aucun contrat en cours",21,ink));
     }
     private void contractDetail(){JSONObject c=find(contracts,selectedContract);if(c==null){selectedContract=null;contractList();return;}
         body.addView(txt(c.optString("title"),30,gold));LinearLayout p=card();p.addView(txt(c.optString("status").toUpperCase()+" · Danger "+c.optInt("danger")+"/5",15,ink));gap(p,8);

@@ -51,7 +51,7 @@ final class SupabaseGateway {
         return objectRequest("POST","/rest/v1/rpc/complete_contract",new JSONObject().put("p_contract",contractId),true);
     }
     JSONArray list(String table,String query)throws Exception{
-        if(!table.matches("profiles|characters|contracts|slots|participants|votes|messages|catalog|rumours"))throw new IllegalArgumentException("Table inconnue");
+        if(!table.matches("profiles|characters|contracts|slots|participants|votes|messages|catalog|rumours|campaign_entries"))throw new IllegalArgumentException("Table inconnue");
         return new JSONArray(request("GET","/rest/v1/"+table+"?"+query,null,true));
     }
     JSONArray names()throws Exception{return new JSONArray(request("POST","/rest/v1/rpc/shared_character_names",new JSONObject(),true));}
@@ -60,9 +60,10 @@ final class SupabaseGateway {
         return objectRequest("POST","/rest/v1/rpc/"+name,args,true);
     }
     void insertRumour(JSONObject entry)throws Exception{request("POST","/rest/v1/rumours",entry,true);}
+    void insertCampaignEntry(JSONObject entry)throws Exception{request("POST","/rest/v1/campaign_entries",entry,true);}
     void insertMessage(JSONObject entry)throws Exception{request("POST","/rest/v1/messages",entry,true);}
     void remove(String table,String id)throws Exception{
-        if(!table.matches("characters|contracts|rumours"))throw new IllegalArgumentException("Table inconnue");
+        if(!table.matches("characters|contracts|rumours|campaign_entries"))throw new IllegalArgumentException("Table inconnue");
         request("DELETE","/rest/v1/"+table+"?id=eq."+id,null,true);
     }
     private JSONObject objectRequest(String method,String path,JSONObject body,boolean authenticated)throws Exception{

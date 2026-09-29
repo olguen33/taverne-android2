@@ -105,14 +105,19 @@ public final class MainActivity extends Activity {
     private static final String MUSIC_ENABLED="music_enabled";
     private static final String SESSION_PREFS="session";
     private static final String REMEMBERED_ACCOUNT="remembered_account_id";
-    @Override public void onCreate(Bundle state){super.onCreate(state);getWindow().setStatusBarColor(FOREST);getWindow().setNavigationBarColor(FOREST);db=new TavernDb(this);SharedPreferences prefs=getSharedPreferences(SESSION_PREFS,MODE_PRIVATE);long remembered=prefs.getLong(REMEMBERED_ACCOUNT,-1);if(remembered>=0){if(!db.accountName(remembered).isEmpty())accountId=remembered;else prefs.edit().remove(REMEMBERED_ACCOUNT).apply();}updates=new UpdateManager(this);show();updates.check(false);if(state==null)startActivity(new Intent(this,SharedActivity.class));}
-    @Override protected void onResume(){super.onResume();if(root!=null)root.post(this::hideSystemBarsAfterAttach);if(updates!=null)updates.resume();syncTavernAudio();}
+    @Override public void onCreate(Bundle state){super.onCreate(state);getWindow().setStatusBarColor(FOREST);getWindow().setNavigationBarColor(FOREST);db=new TavernDb(this);SharedPreferences prefs=getSharedPreferences(SESSION_PREFS,MODE_PRIVATE);long remembered=prefs.getLong(REMEMBERED_ACCOUNT,-1);if(remembered>=0){if(!db.accountName(remembered).isEmpty())accountId=remembered;else prefs.edit().remove(REMEMBERED_ACCOUNT).apply();}updates=new UpdateManager(this);show();updates.check(false);if(state==null&&!onlineSession())startActivity(new Intent(this,SharedActivity.class));}
+    @Override protected void onResume(){super.onResume();if(updates!=null)updates.resume();if(useOnline())section="accueil";show();syncTavernAudio();}
     @Override protected void onPause(){pauseTavernAudio();super.onPause();}
+    @Override public void onWindowFocusChanged(boolean hasFocus){super.onWindowFocusChanged(hasFocus);if(hasFocus)syncTavernAudio();else pauseTavernAudio();}
     @Override protected void onDestroy(){if(tavernAudio!=null){tavernAudio.release();tavernAudio=null;}super.onDestroy();}
     private boolean musicEnabled(){return getSharedPreferences(AUDIO_PREFS,MODE_PRIVATE).getBoolean(MUSIC_ENABLED,true);}
+    private boolean onlineSession(){return !getSharedPreferences("online_session",MODE_PRIVATE).getString("refresh","").isEmpty();}
+    private boolean legacyMode(){return getSharedPreferences("online_session",MODE_PRIVATE).getBoolean("legacy_mode",false);}
+    private boolean useOnline(){return onlineSession()&&!legacyMode();}
+    private void openShared(String page){Intent intent=new Intent(this,SharedActivity.class);intent.putExtra("page",page);startActivity(intent);}
     private void pauseTavernAudio(){if(tavernAudio!=null&&tavernAudio.isPlaying())tavernAudio.pause();}
     private void syncTavernAudio(){
-        if(accountId<0||!section.equals("accueil")||!musicEnabled()||isFinishing()){pauseTavernAudio();return;}
+        if((accountId<0&&!useOnline())||!section.equals("accueil")||!musicEnabled()||isFinishing()||!hasWindowFocus()){pauseTavernAudio();return;}
         if(tavernAudio==null){tavernAudio=MediaPlayer.create(this,R.raw.tavern_ambience);if(tavernAudio==null)return;tavernAudio.setLooping(true);}
         if(!tavernAudio.isPlaying())tavernAudio.start();
     }
@@ -138,7 +143,7 @@ public final class MainActivity extends Activity {
     private LinearLayout panel(){LinearLayout p=column();p.setPadding(dp(20),dp(20),dp(20),dp(20));p.setBackground(background(PAPER,14));LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-1,-2);params.bottomMargin=dp(16);body.addView(p,params);return p;}
     private void title(String value){TextView eyebrow=text("COMPAGNIE DES MERCENAIRES",12,GOLD,true);eyebrow.setLetterSpacing(.12f);body.addView(eyebrow);gap(body,9);TextView h=text(value,38,0xffe8e1d0,true);body.addView(h);gap(body,24);}
     private void info(String message){Toast.makeText(this,message,Toast.LENGTH_SHORT).show();}
-    private void enterSection(String target){section=target;show();}
+    private void enterSection(String target){if(useOnline()){openShared(target.equals("mj")?"Contrats":Character.toUpperCase(target.charAt(0))+target.substring(1));return;}section=target;show();}
     private String pageKey(){
         return accountId+":"+section+":"+charactersPage+":"+openArchetype+":"+openCharacter+":"+openContract+":"+mjPage+":"+campaignCharacter+":"+expandedCampaignPanel;
     }
@@ -155,7 +160,7 @@ public final class MainActivity extends Activity {
             return insets;
         });
         setContentView(root);root.requestApplyInsets();root.post(this::hideSystemBarsAfterAttach);syncTavernAudio();
-        if(accountId<0){showAuthentication();return;}
+        if(accountId<0&&!useOnline()){showAuthentication();return;}
         if(section.equals("accueil"))showHome();
         else{
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);header.setPadding(dp(12),dp(14),dp(18),dp(12));root.addView(header);
@@ -185,7 +190,7 @@ public final class MainActivity extends Activity {
             PopupWindow menu=new PopupWindow(entries,dp(52),dp(162),true);menu.setBackgroundDrawable(background(0xb0324a3c,18));menu.setElevation(dp(6));menu.setOutsideTouchable(true);
             TextView update=text("↻",27,GOLD,false);update.setGravity(Gravity.CENTER);update.setContentDescription("Vérifier les mises à jour");entries.addView(update,new LinearLayout.LayoutParams(dp(52),dp(54)));update.setOnClickListener(click->{menu.dismiss();updates.check(true);});
             TextView music=text(musicEnabled()?"♫":"♪",27,GOLD,false);music.setGravity(Gravity.CENTER);music.setContentDescription(musicEnabled()?"Désactiver la musique":"Activer la musique");entries.addView(music,new LinearLayout.LayoutParams(dp(52),dp(54)));music.setOnClickListener(click->{getSharedPreferences(AUDIO_PREFS,MODE_PRIVATE).edit().putBoolean(MUSIC_ENABLED,!musicEnabled()).apply();syncTavernAudio();menu.dismiss();});
-            TextView logout=text("✕",27,0xffffb8a9,false);logout.setGravity(Gravity.CENTER);logout.setContentDescription("Quitter");entries.addView(logout,new LinearLayout.LayoutParams(dp(52),dp(54)));logout.setOnClickListener(click->{menu.dismiss();getSharedPreferences(SESSION_PREFS,MODE_PRIVATE).edit().remove(REMEMBERED_ACCOUNT).apply();accountId=-1;openCharacter=-1;openContract=-1;section="accueil";show();});
+            TextView logout=text(useOnline()?"☻":"✕",27,0xffffb8a9,false);logout.setGravity(Gravity.CENTER);logout.setContentDescription(useOnline()?"Compte en ligne et déconnexion":"Quitter");entries.addView(logout,new LinearLayout.LayoutParams(dp(52),dp(54)));logout.setOnClickListener(click->{menu.dismiss();if(useOnline()){openShared("Accueil");return;}getSharedPreferences(SESSION_PREFS,MODE_PRIVATE).edit().remove(REMEMBERED_ACCOUNT).apply();accountId=-1;openCharacter=-1;openContract=-1;section="accueil";show();});
             menu.showAsDropDown(gear,0,dp(4));
         });return gear;
     }
@@ -193,8 +198,8 @@ public final class MainActivity extends Activity {
         FrameLayout frame=new FrameLayout(this);root.addView(frame,new LinearLayout.LayoutParams(-1,0,1));
         frame.addView(new TavernHomeView(),new FrameLayout.LayoutParams(-1,-1));
         TextView gear=gearMenu();FrameLayout.LayoutParams corner=new FrameLayout.LayoutParams(dp(52),dp(52),Gravity.TOP|Gravity.RIGHT);corner.setMargins(0,dp(12),dp(12),0);frame.addView(gear,corner);
-        Button online=button("Compagnie en ligne",()->startActivity(new Intent(this,SharedActivity.class)));
-        FrameLayout.LayoutParams onlinePosition=new FrameLayout.LayoutParams(dp(190),dp(50),Gravity.TOP|Gravity.LEFT);onlinePosition.setMargins(dp(12),dp(12),0,0);frame.addView(online,onlinePosition);
+        if(!useOnline()){Button online=button(onlineSession()?"Retour en ligne":"Compagnie en ligne",()->{getSharedPreferences("online_session",MODE_PRIVATE).edit().putBoolean("legacy_mode",false).apply();section="accueil";show();if(!onlineSession())openShared("Accueil");});
+            FrameLayout.LayoutParams onlinePosition=new FrameLayout.LayoutParams(dp(190),dp(50),Gravity.TOP|Gravity.LEFT);onlinePosition.setMargins(dp(12),dp(12),0,0);frame.addView(online,onlinePosition);}
         View campaign=new CampaignScroll();campaign.setElevation(dp(5));
         campaign.setContentDescription("Ouvrir la campagne");
         FrameLayout.LayoutParams link=new FrameLayout.LayoutParams(dp(190),dp(64),Gravity.BOTTOM|Gravity.RIGHT);
@@ -303,7 +308,7 @@ public final class MainActivity extends Activity {
             else if(x>.85f&&x<.99f&&y>.29f&&y<.56f)target="personnages";
             else if(x>.52f&&x<.84f&&y>.16f&&y<.40f)target="contrats";
             else if(x>.28f&&x<.79f&&y>.59f&&y<.74f)target="carte";
-            if(target!=null){section=target;openCharacter=-1;openContract=-1;show();performClick();}return true;
+            if(target!=null){openCharacter=-1;openContract=-1;enterSection(target);performClick();}return true;
         }
         @Override public boolean performClick(){super.performClick();return true;}
     }
@@ -501,7 +506,7 @@ public final class MainActivity extends Activity {
             public void onNothingSelected(AdapterView<?> view){}
         });return spinner;
     }
-    private void tab(LinearLayout nav,String name,String target){TextView t=text(name,14,section.equals(target)?GOLD:0xffb1bfb4,section.equals(target));t.setGravity(Gravity.CENTER);t.setPadding(dp(12),0,dp(12),0);t.setMinWidth(dp(94));nav.addView(t,new LinearLayout.LayoutParams(-2,-1));t.setOnClickListener(v->{pauseTavernAudio();section=target;openContract=-1;openCharacter=-1;editingContractId=-1;if(target.equals("personnages"))charactersPage=0;if(target.equals("mj"))mjPage=-1;show();});}
+    private void tab(LinearLayout nav,String name,String target){TextView t=text(name,14,section.equals(target)?GOLD:0xffb1bfb4,section.equals(target));t.setGravity(Gravity.CENTER);t.setPadding(dp(12),0,dp(12),0);t.setMinWidth(dp(94));nav.addView(t,new LinearLayout.LayoutParams(-2,-1));t.setOnClickListener(v->{pauseTavernAudio();openContract=-1;openCharacter=-1;editingContractId=-1;if(target.equals("personnages"))charactersPage=0;if(target.equals("mj"))mjPage=-1;enterSection(target);});}
     private void contractList(){
         title("Contrats");
         LinearLayout tabs=new LinearLayout(this);body.addView(tabs);gap(body,18);
