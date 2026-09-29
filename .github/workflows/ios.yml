@@ -1,0 +1,23 @@
+name: iOS simulator build
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature-shared-backend]
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios.yml'
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install project generator
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate --spec ios/project.yml --project ios
+      - name: Build for iPhone simulator
+        run: xcodebuild -project ios/LaTaverne.xcodeproj -scheme LaTaverne -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath ios/build CODE_SIGNING_ALLOWED=NO build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LaTaverne-iOS-simulator
+          path: ios/build/Build/Products/Release-iphonesimulator/LaTaverne.app
