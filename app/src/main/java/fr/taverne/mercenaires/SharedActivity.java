@@ -47,7 +47,8 @@ public final class SharedActivity extends Activity {
     private SharedPreferences prefs;
     private LinearLayout root,body;
     private ScrollView scroll;
-    private String page="Accueil",selectedCharacter,selectedContract,userId="",pseudo="",renderedKey;
+    private String page="Accueil",selectedCharacter,selectedContract,selectedCampaignCharacter,userId="",pseudo="",renderedKey;
+    private int expandedCampaignPanel=-1;
     private boolean registering=false,busy=false;
     private boolean completedContracts=false;
     private final Handler refreshHandler=new Handler(Looper.getMainLooper());
@@ -98,7 +99,7 @@ public final class SharedActivity extends Activity {
     private String player(String id){JSONObject p=find(profiles,id);return p==null?"MJ":p.optString("pseudo","MJ");}
     private void render(){
         if(scroll!=null&&renderedKey!=null)positions.put(renderedKey,scroll.getScrollY());scroll=null;
-        renderedKey=page+":"+selectedCharacter+":"+selectedContract;
+        renderedKey=page+":"+selectedCharacter+":"+selectedContract+":"+selectedCampaignCharacter+":"+expandedCampaignPanel;
         root=col();root.setBackgroundColor(forest);setContentView(root);
         if(userId.isEmpty()){authScreen();return;}
         LinearLayout top=new LinearLayout(this);top.setGravity(Gravity.CENTER_VERTICAL);top.setPadding(dp(12),dp(14),dp(18),dp(12));root.addView(top);
@@ -114,7 +115,7 @@ public final class SharedActivity extends Activity {
         Integer y=positions.get(renderedKey);if(y!=null)scroll.post(()->scroll.scrollTo(0,y));
         HorizontalScrollView navScroll=new HorizontalScrollView(this);navScroll.setHorizontalScrollBarEnabled(false);navScroll.setFillViewport(true);navScroll.setBackgroundColor(0xff192a25);root.addView(navScroll,new LinearLayout.LayoutParams(-1,dp(68)));
         LinearLayout nav=new LinearLayout(this);navScroll.addView(nav);for(String tab:new String[]{"Contrats","Carte","Rumeurs","Personnages","Campagne","Boutique","Archétypes","Dés"}){
-            TextView item=txt(tab,14,tab.equals(page)?gold:0xffb1bfb4);item.setGravity(Gravity.CENTER);item.setPadding(dp(12),0,dp(12),0);item.setMinWidth(dp(94));nav.addView(item,new LinearLayout.LayoutParams(-2,-1));item.setOnClickListener(v->{page=tab;selectedCharacter=null;selectedContract=null;render();});}
+            TextView item=txt(tab,14,tab.equals(page)?gold:0xffb1bfb4);item.setGravity(Gravity.CENTER);item.setPadding(dp(12),0,dp(12),0);item.setMinWidth(dp(94));nav.addView(item,new LinearLayout.LayoutParams(-2,-1));item.setOnClickListener(v->{page=tab;selectedCharacter=null;selectedContract=null;selectedCampaignCharacter=null;expandedCampaignPanel=-1;render();});}
     }
     private void authScreen(){ScrollView s=new ScrollView(this);root.addView(s);body=col();body.setPadding(dp(22),dp(55),dp(22),dp(22));s.addView(body);body.addView(txt("La Taverne · Compagnie en ligne",30,gold));gap(body,16);
         LinearLayout p=card();p.addView(txt(registering?"Créer un compte en ligne":"Connexion en ligne",23,ink));gap(p,12);
@@ -132,8 +133,47 @@ public final class SharedActivity extends Activity {
         button(p,"Changer mon pseudo",()->{EditText newName=new EditText(this);newName.setText(pseudo);new AlertDialog.Builder(this).setTitle("Pseudo visible").setView(newName).setNegativeButton("Annuler",null)
             .setPositiveButton("Enregistrer",(d,w)->submit(()->api.rpc("set_pseudo",new JSONObject().put("p_pseudo",newName.getText().toString().trim())))).show();});
         button(p,"Importer mes personnages locaux",this::importDialog);button(p,"Ouvrir l’ancienne interface locale",()->{prefs.edit().putBoolean("legacy_mode",true).apply();finish();});}
-    private void campaignScreen(){body.addView(txt("Campagne",38,0xffe8e1d0));gap(body,24);
-        LinearLayout compose=card();compose.addView(txt("Parchemin de la compagnie",23,ink));gap(compose,12);
+    private void campaignScreen(){
+        if(selectedCampaignCharacter==null){body.addView(txt("Campagne",38,0xffe8e1d0));gap(body,24);
+            LinearLayout intro=card();intro.addView(txt("Choisis ton personnage",24,ink));gap(intro,10);
+            intro.addView(txt("Ouvre son espace de campagne pour consulter sa fiche, son inventaire, ses dés et ses notes.",16,ink));
+            if(characters.length()==0)card().addView(txt("Aucun personnage pour ce compte. Crée un personnage dans l’onglet Personnages.",17,ink));
+            for(int i=0;i<characters.length();i++){JSONObject c=characters.optJSONObject(i);LinearLayout entry=card();entry.addView(txt(c.optString("name"),25,ink));
+                gap(entry,6);entry.addView(txt(c.optString("race")+" · "+c.optString("archetype")+" · "+c.optString("origin"),15,ink));
+                button(entry,"Choisir ce personnage",()->{selectedCampaignCharacter=c.optString("id");render();});}
+            sharedCampaignEntries();return;
+        }
+        JSONObject c=find(characters,selectedCampaignCharacter);if(c==null){selectedCampaignCharacter=null;campaignScreen();return;}
+        button(body,"‹  Changer de personnage",()->{selectedCampaignCharacter=null;expandedCampaignPanel=-1;render();});gap(body,16);
+        body.addView(txt(c.optString("name"),38,0xffe8e1d0));gap(body,24);
+        String[] sections={"Fiche du personnage","Inventaire","Dés","Note"};
+        for(int i=0;i<sections.length;i++){if(expandedCampaignPanel>=0&&expandedCampaignPanel!=i)continue;
+            final int index=i;LinearLayout panel=card();LinearLayout heading=new LinearLayout(this);heading.setGravity(Gravity.CENTER_VERTICAL);panel.addView(heading);
+            heading.addView(txt(sections[i],22,ink),new LinearLayout.LayoutParams(0,-2,1));TextView expand=txt(expandedCampaignPanel==i?"↙":"⤢",26,ink);
+            expand.setGravity(Gravity.CENTER);expand.setContentDescription(expandedCampaignPanel==i?"Réduire "+sections[i]:"Agrandir "+sections[i]);
+            heading.addView(expand,new LinearLayout.LayoutParams(dp(44),dp(44)));expand.setOnClickListener(v->{expandedCampaignPanel=expandedCampaignPanel==index?-1:index;render();});gap(panel,12);
+            if(i==0){panel.addView(txt(c.optString("race")+" · "+c.optString("archetype")+" · "+c.optString("origin"),17,ink));
+                ArchetypeRules.Profile profile=ArchetypeRules.forName(c.optString("archetype"));if(profile!=null){int[] values=ArchetypeRules.finalStats(profile,c.optString("race"),c.optString("origin"));
+                    StringBuilder stats=new StringBuilder();for(int k=0;k<values.length;k++)stats.append(ArchetypeRules.LABELS[k]).append(" : ").append(values[k]).append("\n");panel.addView(txt(stats.toString(),16,ink));}
+                if(!c.optString("sheet").isEmpty())panel.addView(txt(c.optString("sheet"),16,ink));
+                button(panel,"Ouvrir et modifier la fiche",()->{page="Personnages";selectedCharacter=c.optString("id");render();});}
+            else if(i==1){panel.addView(txt("Bourse : "+c.optLong("gold")+" pièces d’or",17,ink));EditText inventory=field(panel,"Un objet et sa quantité par ligne",c.optString("inventory"),5);
+                button(panel,"Enregistrer l’inventaire",()->submit(()->api.rpc("save_character",characterArgs(c.optString("id"),c.optString("name"),c.optString("race"),c.optString("archetype"),c.optString("origin"),c.optString("sheet"),c.optString("lore"),inventory.getText().toString(),c.optString("campaign_notes")))));}
+            else if(i==2)campaignDice(panel);
+            else{EditText notes=field(panel,"Notes de campagne…",c.optString("campaign_notes"),6);
+                button(panel,"Enregistrer la note",()->submit(()->api.rpc("save_character",characterArgs(c.optString("id"),c.optString("name"),c.optString("race"),c.optString("archetype"),c.optString("origin"),c.optString("sheet"),c.optString("lore"),c.optString("inventory"),notes.getText().toString()))));}
+        }
+        sharedCampaignEntries();
+    }
+    private void campaignDice(LinearLayout panel){TextView result=txt("Choisis un dé et sa quantité, puis touche D pour lancer.",18,ink);
+        java.security.SecureRandom random=new java.security.SecureRandom();for(int sides:new int[]{4,6,8,10,12,20,100}){
+            int[] count={1};LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);panel.addView(row);
+            button(row,"D"+sides,()->{int total=0;StringBuilder rolls=new StringBuilder();for(int k=0;k<count[0];k++){int value=1+random.nextInt(sides);total+=value;if(k>0)rolls.append(" + ");rolls.append(value);}result.setText(count[0]+"D"+sides+" : "+rolls+" = "+total);});
+            TextView number=txt("1",19,ink);button(row,"‹",()->{if(count[0]>1)count[0]--;number.setText(Integer.toString(count[0]));});row.addView(number);
+            button(row,"›",()->{if(count[0]<100)count[0]++;number.setText(Integer.toString(count[0]));});}
+        gap(panel,8);panel.addView(result);
+    }
+    private void sharedCampaignEntries(){LinearLayout compose=card();compose.addView(txt("Parchemin de la compagnie",23,ink));gap(compose,12);
         EditText title=field(compose,"Titre","",1),content=field(compose,"Informations à partager avec tous les joueurs","",5);
         button(compose,"Publier dans la campagne",()->{String t=title.getText().toString().trim(),b=content.getText().toString().trim();
             if(t.isEmpty()||t.length()>120||b.isEmpty()||b.length()>8000){notice("Titre ou contenu invalide.");return;}
@@ -300,5 +340,5 @@ public final class SharedActivity extends Activity {
             button(row,"›",()->{count[0]=Math.min(100,count[0]+1);number.setText(Integer.toString(count[0]));});TextView result=txt("",17,ink);p.addView(result);
             button(p,"Lancer "+sides+" faces",()->{StringBuilder values=new StringBuilder();int sum=0;for(int i=0;i<count[0];i++){int die=random.nextInt(sides)+1;sum+=die;if(i>0)values.append(" + ");values.append(die);}result.setText(values+" = "+sum);});}
     }
-    @Override public void onBackPressed(){if(selectedCharacter!=null){selectedCharacter=null;render();}else if(selectedContract!=null){selectedContract=null;render();}else if(!"Accueil".equals(page)){page="Accueil";render();}else super.onBackPressed();}
+    @Override public void onBackPressed(){if(selectedCharacter!=null){selectedCharacter=null;render();}else if(selectedContract!=null){selectedContract=null;render();}else if(selectedCampaignCharacter!=null){selectedCampaignCharacter=null;expandedCampaignPanel=-1;render();}else if(!"Accueil".equals(page)){page="Accueil";render();}else super.onBackPressed();}
 }
