@@ -57,7 +57,8 @@ public final class SharedActivity extends Activity {
     private String editingContractId;
     private String pendingContractId;
     private String pendingRumourId;
-    private boolean registering=false,busy=false,draftDirty=false;
+    private boolean registering=false,busy=false,draftDirty=false,restoringSession=false;
+    private String loadingError="";
     private boolean completedContracts=false;
     private final Handler refreshHandler=new Handler(Looper.getMainLooper());
     private final Runnable periodicRefresh=new Runnable(){@Override public void run(){
@@ -68,7 +69,8 @@ public final class SharedActivity extends Activity {
     private final Map<String,Integer> positions=new HashMap<>();
     private int paper=0xffeae2ce,forest=0xff14231f,ink=0xff25352e,gold=0xffd8b76d;
     interface Work { void run() throws Exception; }
-    @Override public void onCreate(Bundle state){super.onCreate(state);prefs=getSharedPreferences(PREF,MODE_PRIVATE);updates=new UpdateManager(this);String requested=getIntent().getStringExtra("page");if(requested!=null&&java.util.Arrays.asList(TABS).contains(requested))page=requested;getWindow().setStatusBarColor(forest);getWindow().setNavigationBarColor(forest);render();String refresh=prefs.getString("refresh","");if(!refresh.isEmpty())task(()->{saveSession(api.refresh(refresh));load();},()->render());}
+    @Override public void onCreate(Bundle state){super.onCreate(state);prefs=getSharedPreferences(PREF,MODE_PRIVATE);updates=new UpdateManager(this);String requested=getIntent().getStringExtra("page");if(requested!=null&&java.util.Arrays.asList(TABS).contains(requested))page=requested;getWindow().setStatusBarColor(forest);getWindow().setNavigationBarColor(forest);if(!prefs.getString("refresh","").isEmpty()){restoreSession();}else render();}
+    private void restoreSession(){if(busy)return;restoringSession=true;loadingError="";render();task(()->{String refresh=prefs.getString("refresh","");if(refresh.isEmpty())throw new IllegalStateException("Session expirée. Connecte-toi à nouveau.");saveSession(api.refresh(refresh));load();},()->{restoringSession=false;loadingError="";render();});}
     @Override protected void onResume(){super.onResume();updates.resume();if(!userId.isEmpty()&&!busy)refresh();refreshHandler.removeCallbacks(periodicRefresh);refreshHandler.postDelayed(periodicRefresh,15000);}
     @Override protected void onPause(){refreshHandler.removeCallbacks(periodicRefresh);super.onPause();}
     private int dp(int n){return TavernUi.dp(this,n);}
@@ -90,7 +92,7 @@ public final class SharedActivity extends Activity {
                     saveSession(api.refresh(prefs.getString("refresh","")));work.run();
                 }else throw e;
             }catch(Exception retry){String detail=retry.getMessage();error=retry instanceof java.net.UnknownHostException||retry instanceof java.net.SocketTimeoutException?"Connexion indisponible. Réessaie quand le réseau revient.":detail!=null&&(detail.contains("over_email_send_rate_limit")||detail.contains("email rate limit"))?"Envoi d’e-mails temporairement limité. Réessaie plus tard.":detail==null?"Erreur réseau":detail;}
-        }String failure=error;runOnUiThread(()->{busy=false;if(failure!=null){notice(failure.length()>180?failure.substring(0,180):failure);if(userId.isEmpty()&&prefs.contains("refresh")&&(failure.contains("invalid_grant")||failure.contains("refresh_token_not_found"))){prefs.edit().remove("refresh").apply();render();}}else success.run();});}).start();}
+        }String failure=error;runOnUiThread(()->{busy=false;if(failure!=null){if(restoringSession){restoringSession=false;loadingError=failure.length()>180?failure.substring(0,180):failure;if(failure.contains("invalid_grant")||failure.contains("refresh_token_not_found")){prefs.edit().remove("refresh").apply();userId="";api.signOut();}render();}else notice(failure.length()>180?failure.substring(0,180):failure);}else success.run();});}).start();}
     private void saveSession(JSONObject result)throws Exception{
         String token=result.getString("access_token"),refresh=result.getString("refresh_token");api.useToken(token);
         JSONObject user=result.getJSONObject("user");userId=user.getString("id");prefs.edit().putString("refresh",refresh).apply();
@@ -111,10 +113,10 @@ public final class SharedActivity extends Activity {
     private String player(String id){JSONObject p=find(profiles,id);return p==null?"MJ":p.optString("pseudo","MJ");}
     private void render(){
         if(scroll!=null&&renderedKey!=null)positions.put(renderedKey,scroll.getScrollY());scroll=null;
-        if(!userId.isEmpty()&&"Accueil".equals(page)){finish();return;}
+        if(!restoringSession&&loadingError.isEmpty()&&!userId.isEmpty()&&"Accueil".equals(page)){finish();return;}
         renderedKey=page+":"+selectedCharacter+":"+selectedContract+":"+selectedCampaignCharacter+":"+expandedCampaignPanel+":"+selectedArchetype+":"+contractEditor;
         root=col();root.setBackgroundColor(forest);setContentView(root);
-        draftDirty=false;if(userId.isEmpty()){authScreen();return;}
+        draftDirty=false;if(userId.isEmpty()||restoringSession||!loadingError.isEmpty()){authScreen();return;}
         LinearLayout top=new LinearLayout(this);top.setGravity(Gravity.CENTER_VERTICAL);top.setPadding(dp(12),dp(14),dp(18),dp(12));root.addView(top);
         TextView back=txt("‹",32,gold);back.setGravity(Gravity.CENTER);back.setContentDescription("Retour à la Taverne");top.addView(back,new LinearLayout.LayoutParams(dp(48),dp(48)));back.setOnClickListener(v->finish());
         TextView title=txt("La Taverne",24,0xffe8e1d0);title.setTypeface(Typeface.SERIF,Typeface.BOLD);top.addView(title,new LinearLayout.LayoutParams(0,-2,1));
@@ -138,6 +140,8 @@ public final class SharedActivity extends Activity {
             TextView item=txt(tab,14,tab.equals(page)?gold:0xffb1bfb4);item.setGravity(Gravity.CENTER);item.setPadding(dp(12),0,dp(12),0);item.setMinWidth(dp(94));nav.addView(item,new LinearLayout.LayoutParams(-2,-1));item.setOnClickListener(v->{page=tab;selectedCharacter=null;selectedContract=null;selectedCampaignCharacter=null;expandedCampaignPanel=-1;selectedArchetype=-1;render();});}
     }
     private void authScreen(){ScrollView s=new ScrollView(this);root.addView(s);body=col();body.setPadding(dp(22),dp(55),dp(22),dp(22));s.addView(body);body.addView(txt("La Taverne · Compagnie en ligne",30,gold));gap(body,16);
+        if(restoringSession){LinearLayout loading=card();loading.addView(txt("Chargement de la compagnie…",20,ink));button(loading,"Retour à la Taverne",this::finish);return;}
+        if(!loadingError.isEmpty()){LinearLayout error=card();error.addView(txt("Chargement interrompu",21,ink));error.addView(txt(loadingError,15,ink));if(!prefs.getString("refresh","").isEmpty())button(error,"Réessayer",this::restoreSession);button(error,"Retour à la Taverne",this::finish);}
         LinearLayout p=card();p.addView(txt(registering?"Créer un compte en ligne":"Connexion en ligne",23,ink));gap(p,12);
         EditText email=field(p,"Adresse e-mail","",1);email.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
         EditText password=field(p,"Mot de passe","",1);password.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
