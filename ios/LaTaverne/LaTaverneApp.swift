@@ -1,132 +1,75 @@
 import SwiftUI
-import WebKit
 
 @main
 struct LaTaverneApp: App {
+    @StateObject private var game = GameStore()
     var body: some Scene {
         WindowGroup {
-            TavernScreen()
+            Group { if game.authenticated { MainTabs() } else { LoginScreen() } }
+                .environmentObject(game)
+                .tint(Color(red: 0.55, green: 0.40, blue: 0.20))
+                .task { await game.restore() }
         }
     }
 }
 
-private enum TavernURL {
-    static let home = URL(string: "https://taverne-pere-rufus.olguen33.chatgpt.site")!
-}
-
-@MainActor
-final class TavernBrowser: ObservableObject {
-    @Published var isLoading = true
-    @Published var errorMessage: String?
-    weak var webView: WKWebView?
-
-    func reload() {
-        errorMessage = nil
-        isLoading = true
-        guard let webView else { return }
-        if webView.url == nil {
-            webView.load(URLRequest(url: TavernURL.home))
-        } else {
-            webView.reload()
-        }
-    }
-}
-
-private struct TavernScreen: View {
-    @StateObject private var browser = TavernBrowser()
-
+struct MainTabs: View {
+    @EnvironmentObject var game: GameStore
     var body: some View {
-        ZStack {
-            Color(red: 20 / 255, green: 35 / 255, blue: 31 / 255)
-                .ignoresSafeArea()
-            TavernWebView(browser: browser)
-                .ignoresSafeArea(edges: .bottom)
-
-            if let message = browser.errorMessage {
-                VStack(spacing: 16) {
-                    Image(systemName: "wifi.exclamationmark")
-                        .font(.system(size: 36))
-                    Text("Connexion à la Taverne impossible")
-                        .font(.headline)
-                    Text(message)
-                        .font(.subheadline)
-                        .multilineTextAlignment(.center)
-                    Button("Réessayer") { browser.reload() }
-                        .buttonStyle(.borderedProminent)
-                        .tint(Color(red: 40 / 255, green: 84 / 255, blue: 64 / 255))
-                }
-                .padding(28)
-                .frame(maxWidth: 340)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
-            } else if browser.isLoading {
-                ProgressView("Ouverture de la Taverne…")
-                    .tint(.white)
-                    .foregroundStyle(.white)
-            }
+        TabView {
+            NavigationStack { HomeScreen() }.tabItem { Label("Taverne", systemImage: "house.fill") }
+            NavigationStack { ContractsScreen() }.tabItem { Label("Contrats", systemImage: "scroll.fill") }
+            NavigationStack { CharactersScreen() }.tabItem { Label("Personnages", systemImage: "person.2.fill") }
+            NavigationStack { CampaignScreen() }.tabItem { Label("Campagne", systemImage: "book.fill") }
+            NavigationStack { MoreScreen() }.tabItem { Label("Plus", systemImage: "ellipsis.circle.fill") }
         }
-        .preferredColorScheme(.dark)
+        .task { await game.load() }
     }
 }
 
-private struct TavernWebView: UIViewRepresentable {
-    @ObservedObject var browser: TavernBrowser
-
-    func makeUIView(context: Context) -> WKWebView {
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .default()
-        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
-        let view = WKWebView(frame: .zero, configuration: configuration)
-        view.navigationDelegate = context.coordinator
-        view.isOpaque = false
-        view.backgroundColor = UIColor(red: 20 / 255, green: 35 / 255, blue: 31 / 255, alpha: 1)
-        view.scrollView.contentInsetAdjustmentBehavior = .never
-        browser.webView = view
-        view.load(URLRequest(url: TavernURL.home))
-        return view
+struct LoginScreen: View {
+    @EnvironmentObject var game: GameStore
+    @State private var email = "", password = "", pseudo = ""
+    @State private var registering = false
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 20) {
+                    Image("Tavern").resizable().scaledToFill().frame(height: 215).clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: 18))
+                    Text("La Taverne du père Rufus").font(.largeTitle.bold()).multilineTextAlignment(.center)
+                    VStack(spacing: 14) {
+                        TextField("Adresse e-mail", text: $email).textContentType(.emailAddress)
+                            .keyboardType(.emailAddress).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        SecureField("Mot de passe", text: $password)
+                        if registering { TextField("Pseudo visible", text: $pseudo) }
+                    }.textFieldStyle(.roundedBorder)
+                    Button(registering ? "Créer mon compte" : "Se connecter") {
+                        Task { if registering { await game.signUp(email: email, password: password, pseudo: pseudo) }
+                               else { await game.signIn(email: email, password: password) } }
+                    }.buttonStyle(.borderedProminent).disabled(game.busy || !email.contains("@") || password.count < 8)
+                    Button(registering ? "J’ai déjà un compte" : "Créer un compte") { registering.toggle() }
+                    if let notice = game.notice { Text(notice).foregroundStyle(.secondary) }
+                    if let error = game.error { Text(error).foregroundStyle(.red) }
+                }.padding()
+            }.background(Color(red: 0.94, green: 0.90, blue: 0.81))
+        }
     }
+}
 
-    func updateUIView(_ uiView: WKWebView, context: Context) {}
-
-    func makeCoordinator() -> Coordinator { Coordinator(browser: browser) }
-
-    final class Coordinator: NSObject, WKNavigationDelegate {
-        private let browser: TavernBrowser
-        init(browser: TavernBrowser) { self.browser = browser }
-
-        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-            browser.isLoading = true
-            browser.errorMessage = nil
-        }
-
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            browser.isLoading = false
-            browser.errorMessage = nil
-        }
-
-        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-            browser.isLoading = false
-            browser.errorMessage = error.localizedDescription
-        }
-
-        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-            browser.isLoading = false
-            browser.errorMessage = error.localizedDescription
-        }
-
-        func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-            guard let url = navigationAction.request.url else {
-                decisionHandler(.cancel)
-                return
-            }
-            let host = url.host?.lowercased() ?? ""
-            if host == TavernURL.home.host || host == "dgvvocfpxflmfqaaakoe.supabase.co" || url.scheme == "about" {
-                decisionHandler(.allow)
-            } else if navigationAction.navigationType == .linkActivated {
-                UIApplication.shared.open(url)
-                decisionHandler(.cancel)
-            } else {
-                decisionHandler(.cancel)
-            }
-        }
+struct HomeScreen: View {
+    @EnvironmentObject var game: GameStore
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                Image("Tavern").resizable().scaledToFill().frame(height: 470).clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                Text("Bienvenue, \(game.pseudo)").font(.title2.bold())
+                Text("Les contrats et les personnages sont partagés avec la compagnie.")
+                    .foregroundStyle(.secondary)
+                if let error = game.error { Text(error).foregroundStyle(.red) }
+                Button("Actualiser la compagnie") { Task { await game.load() } }
+            }.padding()
+        }.navigationTitle("La Taverne")
     }
 }
