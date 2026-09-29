@@ -11,7 +11,7 @@ create unique index profiles_pseudo_nocase on public.profiles(lower(pseudo));
 create function public.create_profile() returns trigger language plpgsql security definer
 set search_path = public, pg_temp as $$
 begin
-  insert into public.profiles(id, pseudo) values (new.id, 'joueur_' || left(new.id::text, 8));
+  insert into public.profiles(id, pseudo) values (new.id, 'joueur_' || right(replace(new.id::text,'-',''), 24));
   return new;
 end $$;
 create trigger profile_on_signup after insert on auth.users
