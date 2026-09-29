@@ -187,7 +187,7 @@ public final class MainActivity extends Activity {
         FrameLayout frame=new FrameLayout(this);root.addView(frame,new LinearLayout.LayoutParams(-1,0,1));
         frame.addView(new TavernHomeView(),new FrameLayout.LayoutParams(-1,-1));
         TextView gear=gearMenu();FrameLayout.LayoutParams corner=new FrameLayout.LayoutParams(dp(52),dp(52),Gravity.TOP|Gravity.RIGHT);corner.setMargins(0,dp(12),dp(12),0);frame.addView(gear,corner);
-        if(useOnline()){Button account=button("Compte / Déconnexion",()->openShared("Compte"));FrameLayout.LayoutParams accountPosition=new FrameLayout.LayoutParams(dp(190),dp(50),Gravity.TOP|Gravity.LEFT);accountPosition.setMargins(dp(12),dp(12),0,0);frame.addView(account,accountPosition);}
+        if(useOnline()){Button logout=button("Se déconnecter",()->{getSharedPreferences("online_session",MODE_PRIVATE).edit().remove("refresh").remove("pending_pseudo").putBoolean("legacy_mode",false).apply();section="accueil";show();});FrameLayout.LayoutParams logoutPosition=new FrameLayout.LayoutParams(dp(190),dp(50),Gravity.TOP|Gravity.LEFT);logoutPosition.setMargins(dp(12),dp(12),0,0);frame.addView(logout,logoutPosition);}
         if(!useOnline()){Button online=button(onlineSession()?"Retour en ligne":"Compagnie en ligne",()->{getSharedPreferences("online_session",MODE_PRIVATE).edit().putBoolean("legacy_mode",false).apply();section="accueil";show();if(!onlineSession())openShared("Accueil");});
             FrameLayout.LayoutParams onlinePosition=new FrameLayout.LayoutParams(dp(190),dp(50),Gravity.TOP|Gravity.LEFT);onlinePosition.setMargins(dp(12),dp(12),0,0);frame.addView(online,onlinePosition);}
         View campaign=new CampaignScroll();campaign.setElevation(dp(5));
