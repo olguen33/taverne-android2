@@ -97,6 +97,7 @@ public final class SharedActivity extends Activity {
         String token=result.getString("access_token"),refresh=result.getString("refresh_token");api.useToken(token);
         JSONObject user=result.getJSONObject("user");userId=user.getString("id");prefs.edit().putString("refresh",refresh).apply();
     }
+    private void logout(){prefs.edit().remove("refresh").remove("pending_pseudo").putBoolean("legacy_mode",false).apply();api.signOut();userId="";pseudo="";loadingError="";page="Accueil";selectedCharacter=null;selectedContract=null;selectedCampaignCharacter=null;render();}
     private void load()throws Exception{
         profiles=api.list("profiles","select=id,pseudo");
         characters=api.list("characters","select=*");contracts=api.list("contracts","select=*&order=id.desc");
@@ -125,7 +126,7 @@ public final class SharedActivity extends Activity {
             .setItems(new String[]{"Actualiser","Vérifier les mises à jour","Ambiance de la Taverne : "+(getSharedPreferences("audio_settings",MODE_PRIVATE).getBoolean("music_enabled",true)?"activée":"désactivée"),"Déconnexion"},(dialog,which)->{
                 if(which==0)refresh();else if(which==1)updates.check(true);
                 else if(which==2){SharedPreferences audio=getSharedPreferences("audio_settings",MODE_PRIVATE);audio.edit().putBoolean("music_enabled",!audio.getBoolean("music_enabled",true)).apply();}
-                else{prefs.edit().remove("refresh").apply();api.signOut();userId="";render();}}).show());
+                else logout();}).show());
         if("Carte".equals(page)&&selectedCharacter==null&&selectedContract==null&&!contractEditor)mapScreen();else{
         scroll=new ScrollView(this);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));body=col();body.setPadding(dp(16),dp(16),dp(16),dp(30));scroll.addView(body);
         if(contractEditor)contractFormScreen();else if(selectedCharacter!=null)characterDetail();else if(selectedContract!=null)contractDetail();else switch(page){
@@ -157,7 +158,8 @@ public final class SharedActivity extends Activity {
     private void accountScreen(){LinearLayout p=card();p.addView(txt("Compte de "+pseudo,24,ink));gap(p,8);
         button(p,"Changer mon pseudo",()->{EditText newName=new EditText(this);newName.setText(pseudo);new AlertDialog.Builder(this).setTitle("Pseudo visible").setView(newName).setNegativeButton("Annuler",null)
             .setPositiveButton("Enregistrer",(d,w)->submit(()->api.rpc("set_pseudo",new JSONObject().put("p_pseudo",newName.getText().toString().trim())))).show();});
-        button(p,"Importer mes personnages locaux",this::importDialog);button(p,"Ouvrir l’ancienne interface locale",()->{prefs.edit().putBoolean("legacy_mode",true).apply();finish();});}
+        button(p,"Importer mes personnages locaux",this::importDialog);button(p,"Ouvrir l’ancienne interface locale",()->{prefs.edit().putBoolean("legacy_mode",true).apply();finish();});
+        button(p,"Se déconnecter",this::logout);}
     private void masterScreen(){body.addView(txt("Espace MJ",38,0xffe8e1d0));gap(body,24);
         for(String entry:new String[]{"Publier contrat","Mes contrats","Placer une rumeur","Mes rumeurs","Cartes","Mes cartes","Bestiaire"}){
             LinearLayout p=card();button(p,entry+"  ›",()->{
